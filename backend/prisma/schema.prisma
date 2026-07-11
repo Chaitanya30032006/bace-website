@@ -1,0 +1,408 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum MemberType {
+  General
+  LifeMember
+  YouthMember
+  Volunteer
+}
+
+enum RequestStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(50)
+  users     User[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model User {
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String
+  email              String              @unique
+  mobile             String
+  password           String
+  roleId             Int                 @map("role_id")
+  status             UserStatus          @default(Pending)
+  role               Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  devoteeProfile     DevoteeProfile?
+  membershipRequests MembershipRequest[]
+  reviewedMembershipRequests MembershipRequest[] @relation("MembershipReviewer")
+  uploadedPhotos     Photo[]             @relation("PhotoUploader")
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([status])
+  @@index([roleId])
+  @@map("users")
+}
+
+model MembershipRequest {
+  id         String        @id @default(uuid()) @db.Uuid
+  userId     String        @map("user_id") @db.Uuid
+  status     RequestStatus @default(Pending)
+  comment    String?
+  reviewedBy String?       @map("reviewed_by") @db.Uuid
+  reviewedAt DateTime?     @map("reviewed_at")
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer   User?         @relation("MembershipReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("membership_requests")
+}
+
+model DevoteeProfile {
+  id                       String                    @id @default(uuid()) @db.Uuid
+  userId                   String                    @unique @map("user_id") @db.Uuid
+  devoteeId                String                    @unique @map("devotee_id")
+  photographUrl            String?                   @map("photograph_url")
+  center                   String?
+  lockedSections           String[]                  @default([]) @map("locked_sections")
+  monthlyFee               Float?                    @map("monthly_fee")
+  depositAmount            Float?                    @map("deposit_amount")
+  depositPaid              Boolean                   @default(false) @map("deposit_paid")
+  depositPaidAt            DateTime?                 @map("deposit_paid_at")
+  depositRemarks           String?                   @map("deposit_remarks")
+  user                     User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personalInformation      PersonalInformation?
+  communicationInformation CommunicationInformation?
+  membershipInformation    MembershipInformation?
+  addresses                AddressInformation[]
+  familyInformation        FamilyInformation?
+  educationRecords         EducationInformation[]
+  devotionalInformation    DevotionalInformation?
+  chantingTimeline         ChantingTimeline[]
+  devotionalCourses        DevotionalCourse[]
+  bookProgress             BookReadingProgress[]
+  monthlyPayments          MonthlyPayment[]
+  editRequests             ProfileEditRequest[]
+  leaveRequests            LeaveRequest[]
+  createdAt                DateTime                  @default(now()) @map("created_at")
+  updatedAt                DateTime                  @updatedAt @map("updated_at")
+
+  @@index([devoteeId])
+  @@index([center])
+  @@map("devotee_profiles")
+}
+
+model PersonalInformation {
+  id                 String         @id @default(uuid()) @db.Uuid
+  profileId          String         @unique @map("profile_id") @db.Uuid
+  spiritualName      String?        @map("spiritual_name")
+  gender             String?
+  dob                DateTime?      @db.Date
+  bloodGroup         String?        @map("blood_group")
+  maritalStatus      String?        @map("marital_status")
+  harinamInitiated   Boolean        @default(false) @map("harinam_initiated")
+  initiatedName      String?        @map("initiated_name")
+  spiritualMaster    String?        @map("spiritual_master")
+  initiatedDatePlace String?        @map("initiated_date_place")
+  initiationCeremony String?        @map("initiation_ceremony")
+  brahminInitiated   Boolean        @default(false) @map("brahmin_initiated")
+  previousReligion   String?        @map("previous_religion")
+  firstLanguage      String?        @map("first_language")
+  languagesKnown     String?        @map("languages_known")
+  citizenOf          String?        @map("citizen_of")
+  nativeCountry      String?        @map("native_country")
+  nativeState        String?        @map("native_state")
+  nativeCity         String?        @map("native_city")
+  caste              String?
+  panNumber          String?        @map("pan_number")
+  aadharNumber       String?        @map("aadhar_number")
+  occupation         String?
+  companyOrg         String?        @map("company_org")
+  skills             String?
+  interests          String?
+  hobbies            String?
+  profile            DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  @@map("personal_information")
+}
+
+model CommunicationInformation {
+  id              String         @id @default(uuid()) @db.Uuid
+  profileId       String         @unique @map("profile_id") @db.Uuid
+  whatsappNumber  String?        @map("whatsapp_number")
+  alternateEmail  String?        @map("alternate_email")
+  alternateMobile String?        @map("alternate_mobile")
+  profile         DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@map("communication_information")
+}
+
+model MembershipInformation {
+  id              String         @id @default(uuid()) @db.Uuid
+  profileId       String         @unique @map("profile_id") @db.Uuid
+  memberId        String?        @map("member_id")
+  memberType      MemberType     @default(General) @map("member_type")
+  memberStatus    String         @default("Active") @map("member_status")
+  memberStartDate DateTime?      @map("member_start_date") @db.Date
+  memberExpiryDate DateTime?     @map("member_expiry_date") @db.Date
+  anniversaryInfo String?        @map("anniversary_info")
+  profile         DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([memberType])
+  @@index([memberStatus])
+  @@map("membership_information")
+}
+
+model AddressInformation {
+  id            String         @id @default(uuid()) @db.Uuid
+  profileId     String         @map("profile_id") @db.Uuid
+  type          String
+  houseStreetPO String         @map("house_street_po")
+  country       String         @default("India")
+  stateProvince String         @map("state_province")
+  cityDistrict  String         @map("city_district")
+  pinZip        String?        @map("pin_zip")
+  profile       DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@index([type])
+  @@map("address_information")
+}
+
+model FamilyInformation {
+  id               String         @id @default(uuid()) @db.Uuid
+  profileId        String         @unique @map("profile_id") @db.Uuid
+  fatherName       String?        @map("father_name")
+  motherName       String?        @map("mother_name")
+  fatherContact    String?        @map("father_contact")
+  motherContact    String?        @map("mother_contact")
+  spouseName       String?        @map("spouse_name")
+  childrenDetails  String?        @map("children_details")
+  emergencyContact String?        @map("emergency_contact")
+  profile          DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@map("family_information")
+}
+
+model EducationInformation {
+  id             String         @id @default(uuid()) @db.Uuid
+  profileId      String         @map("profile_id") @db.Uuid
+  qualification  String?
+  school         String?
+  college        String?
+  degree         String?
+  specialization String?
+  passingYear    Int?           @map("passing_year")
+  profile        DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("education_information")
+}
+
+model DevotionalInformation {
+  id                   String         @id @default(uuid()) @db.Uuid
+  profileId            String         @unique @map("profile_id") @db.Uuid
+  dateJoined           DateTime?      @map("date_joined") @db.Date
+  introducedBy         String?        @map("introduced_by")
+  introducedWhen       String?        @map("introduced_when")
+  firstConnectedCenter String?        @map("first_connected_center")
+  spiritualGuide       String?        @map("spiritual_guide")
+  programDetails       String?        @map("program_details")
+  profile              DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  @@map("devotional_information")
+}
+
+model ChantingTimeline {
+  id        String         @id @default(uuid()) @db.Uuid
+  profileId String         @map("profile_id") @db.Uuid
+  rounds    Int
+  startDate DateTime       @map("start_date") @db.Date
+  profile   DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("chanting_timeline")
+}
+
+model DevotionalCourse {
+  id             String         @id @default(uuid()) @db.Uuid
+  profileId      String         @map("profile_id") @db.Uuid
+  courseName     String         @map("course_name")
+  completionYear Int?           @map("completion_year")
+  docUrl         String?        @map("doc_url")
+  status         String?
+  profile        DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("devotional_courses")
+}
+
+model BookReadingProgress {
+  id                 String         @id @default(uuid()) @db.Uuid
+  profileId          String         @map("profile_id") @db.Uuid
+  bookName           String         @map("book_name")
+  totalChapters      Int            @default(0) @map("total_chapters")
+  completedChapters  Int            @default(0) @map("completed_chapters")
+  readingPercentage  Float          @default(0) @map("reading_percentage")
+  lastReadDate       DateTime?      @map("last_read_date") @db.Date
+  notes              String?
+  status             String         @default("Unread")
+  remarks            String?
+  profile            DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@index([bookName])
+  @@map("book_reading_progress")
+}
+
+model Album {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String
+  eventName   String   @map("event_name")
+  eventDate   DateTime @map("event_date") @db.Date
+  year        Int
+  description String?
+  createdBy   String   @map("created_by") @db.Uuid
+  photos      Photo[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([year])
+  @@map("albums")
+}
+
+model Photo {
+  id         String   @id @default(uuid()) @db.Uuid
+  albumId    String   @map("album_id") @db.Uuid
+  photoUrl   String   @map("photo_url")
+  uploadedBy String   @map("uploaded_by") @db.Uuid
+  isApproved Boolean  @default(false) @map("is_approved")
+  approvedBy String?  @map("approved_by") @db.Uuid
+  album      Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  uploader   User     @relation("PhotoUploader", fields: [uploadedBy], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([albumId])
+  @@index([isApproved])
+  @@index([uploadedBy])
+  @@map("photos")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  message   String
+  type      String
+  isRead    Boolean  @default(false) @map("is_read")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  adminId   String   @map("admin_id") @db.Uuid
+  action    String
+  details   String
+  admin     User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([adminId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model MonthlyPayment {
+  id        String         @id @default(uuid()) @db.Uuid
+  profileId String         @map("profile_id") @db.Uuid
+  year      Int
+  month     Int
+  status    String         @default("Unpaid")
+  amount    Float?
+  remarks   String?
+  paidAt    DateTime?      @map("paid_at")
+  profile   DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@unique([profileId, year, month])
+  @@index([profileId])
+  @@map("monthly_payments")
+}
+
+model ProfileEditRequest {
+  id         String        @id @default(uuid()) @db.Uuid
+  profileId  String        @map("profile_id") @db.Uuid
+  section    String
+  reason     String?
+  status     RequestStatus @default(Pending)
+  reviewedBy String?       @map("reviewed_by") @db.Uuid
+  reviewedAt DateTime?     @map("reviewed_at")
+  profile    DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@index([status])
+  @@map("profile_edit_requests")
+}
+
+model LeaveRequest {
+  id          String         @id @default(uuid()) @db.Uuid
+  profileId   String         @map("profile_id") @db.Uuid
+  fromDate    DateTime       @map("from_date")
+  toDate      DateTime       @map("to_date")
+  destination String
+  reason      String?
+  profile     DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  @@index([profileId])
+  @@index([fromDate])
+  @@map("leave_requests")
+}

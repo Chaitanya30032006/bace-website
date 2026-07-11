@@ -1,0 +1,21 @@
+/COM,ANSYS RELEASE Release 16.0      BUILD 16.0      UP20141203       14:47:23
+
+ *** ERROR ***                           CP =       0.578   TIME= 14:47:25
+ Data file C:\Users\LENOVO\Downloads\Sujal\BACE                          
+ website\backend\bace_devotee.db has incorrect format, is missing        
+ READ/WRITE permission, or is empty for RESUME.                          
+
+ *** WARNING ***                         CP =       0.578   TIME= 14:47:25
+ WHILE PROCESSING FILE BASED INPUT (/INPUT OR MACRO) AN ERROR HAS        
+ OCCURRED.  SHOULD INPUT PROCESSING BE SUSPENDED?                        
+
+ *** ERROR ***                           CP =       0.578   TIME= 14:47:38
+ An unexpected error ( SIG$BREAK ) has occurred...  ANSYS internal data  
+ has been corrupted.  ANSYS is unable to recover and will terminate.     
+ Previously saved files are unaffected.  Please send the data leading    
+ to this operation to your technical support provider, as this will      
+ allow ANSYS, Inc to improve the program.                                
+
+ *** WARNING ***                         CP =       0.578   TIME= 14:47:38
+ WHILE PROCESSING FILE BASED INPUT (/INPUT OR MACRO) AN ERROR HAS        
+ OCCURRED.  SHOULD INPUT PROCESSING BE SUSPENDED?                        

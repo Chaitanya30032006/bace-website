@@ -1,0 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-saffron-50: #fff8e1;
+  --color-saffron-100: #ffecb3;
+  --color-saffron-200: #ffe082;
+  --color-saffron-300: #ffd54f;
+  --color-saffron-400: #ffca28;
+  --color-saffron-500: #ffb300;
+  --color-saffron-600: #ff8f00;
+  --color-saffron-700: #ff6f00;
+  --color-saffron-800: #e65100;
+  --color-saffron-900: #bf360c;
+
+  --color-gold-50: #fbf7e6;
+  --color-gold-100: #f6ebc1;
+  --color-gold-200: #efdc98;
+  --color-gold-300: #e7cc6d;
+  --color-gold-400: #e0be4a;
+  --color-gold-500: #d4af37;
+  --color-gold-600: #bfa02f;
+  --color-gold-700: #a38725;
+  --color-gold-800: #876e1d;
+  --color-gold-900: #6c5614;
+}
+
+@layer base {
+  body {
+    font-family: 'Outfit', sans-serif;
+    background-color: rgb(255 248 225 / 0.3); /* orange-50/30 */
+    color: rgb(30 41 59); /* slate-800 */
+    transition-property: color, background-color;
+    transition-duration: 300ms;
+  }
+
+  body.dark {
+    background-color: rgb(2 6 23); /* slate-950 */
+    color: rgb(241 245 249); /* slate-100 */
+  }
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.dark .glass-panel {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 213, 79, 0.6); /* saffron-300/60 */
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 202 40); /* saffron-400 */
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 111, 0, 0.4); /* saffron-700/40 */
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 143 0); /* saffron-600 */
+}
+

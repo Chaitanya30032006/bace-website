@@ -1,0 +1,3 @@
+# Prisma migration SQL must be UTF-8 (UTF-16 breaks migrate on Linux containers)
+backend/prisma/migrations/**/*.sql text eol=lf working-tree-encoding=UTF-8
+backend/docker-entrypoint.sh text eol=lf

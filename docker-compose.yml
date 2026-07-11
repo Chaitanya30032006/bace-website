@@ -1,0 +1,110 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: bace-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bace_devotee_db}
+      POSTGRES_USER: ${POSTGRES_USER:-bace_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bace_password}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - bace_pg_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bace_user} -d ${POSTGRES_DB:-bace_devotee_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bace-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: bace-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - bace_redis_data:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    networks:
+      - bace-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bace-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bace_user}:${POSTGRES_PASSWORD:-bace_password}@db:5432/${POSTGRES_DB:-bace_devotee_db}?schema=public
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-bace_devotee_db}
+      DB_USER: ${POSTGRES_USER:-bace_user}
+      DB_PASS: ${POSTGRES_PASSWORD:-bace_password}
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@bace.org}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin108}
+      REDIS_URL: redis://redis:6379
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_SECRET: ${CLOUDINARY_SECRET:-}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-5000}:5000"
+    volumes:
+      - bace_uploads:/app/uploads
+    networks:
+      - bace-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+    container_name: bace-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - bace-network
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: bace-pgadmin
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@bace.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - bace_pgadmin_data:/var/lib/pgadmin
+    networks:
+      - bace-network
+
+volumes:
+  bace_pg_data:
+  bace_redis_data:
+  bace_uploads:
+  bace_pgadmin_data:
+
+networks:
+  bace-network:
+    driver: bridge
