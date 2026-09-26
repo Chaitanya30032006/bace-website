@@ -1,7 +1,7 @@
 import React from 'react';
 const { useState } = React;
 import { useNavigate, Link } from 'react-router-dom';
-import { UserPlus, Mail, Phone, Lock, User, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UserPlus, Mail, Phone, Lock, User, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import Logo from '../components/Logo';
 import { apiUrl } from '../config/api';
 
@@ -14,6 +14,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -152,14 +153,21 @@ export default function Register() {
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-saffron-500 transition-all dark:text-white"
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-saffron-500 transition-all dark:text-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5">
               Min 8 characters with uppercase, lowercase, number, and special character.

@@ -1,3 +1,6 @@
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export const API_BASE = import.meta.env.VITE_API_URL || '';
 
-export const apiUrl = (path) => `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+export const apiUrl = (path) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return API_BASE ? `${API_BASE}${normalizedPath}` : normalizedPath;
+};

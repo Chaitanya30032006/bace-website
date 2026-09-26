@@ -45,10 +45,12 @@ const profileUpdateSchema = z.object({
     brahminInitiated: z.boolean().optional(),
     panNumber: z.string().max(20).optional(),
     aadharNumber: z.string().max(20).optional(),
-    previousReligion: z.string().max(100).optional(),
     firstLanguage: z.string().max(100).optional(),
     languagesKnown: z.string().max(500).optional(),
     citizenOf: z.string().max(100).optional(),
+    nativeCountry: z.string().max(100).optional(),
+    nativeState: z.string().max(100).optional(),
+    nativeCity: z.string().max(100).optional(),
     caste: z.string().max(100).optional(),
     whatsappNumber: z.string().max(15).optional().or(z.literal('')),
     memberType: z.string().optional(),
@@ -78,11 +80,11 @@ const profileUpdateSchema = z.object({
     pinZip: z.string().max(20).optional().nullable()
   })).optional(),
   familyInfo: z.object({
-    fatherName: z.string().max(100).optional(),
-    motherName: z.string().max(100).optional(),
-    fatherContact: z.string().max(15).optional(),
-    motherContact: z.string().max(15).optional(),
-    emergencyContact: z.string().max(15).optional()
+    fatherName: z.string().max(200).optional(),
+    motherName: z.string().max(200).optional(),
+    fatherContact: z.string().max(200).optional(),
+    motherContact: z.string().max(200).optional(),
+    emergencyContact: z.string().max(200).optional()
   }).optional(),
   educationInfo: z.any().optional(),
   devotionalInfo: z.object({
@@ -114,7 +116,8 @@ const educationSchema = z.object({
   college: z.string().max(200).optional(),
   degree: z.string().max(200).optional(),
   specialization: z.string().max(200).optional(),
-  passingYear: z.number().int().min(1900).max(2100).optional().nullable()
+  passingYear: z.number().int().min(1900).max(2100).optional().nullable(),
+  status: z.string().max(50).optional()
 });
 
 const bookProgressSchema = z.object({

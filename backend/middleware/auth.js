@@ -32,7 +32,7 @@ const authenticate = async (req, res, next) => {
       return res.status(403).json({ message: 'Your account is pending approval or has been rejected.' });
     }
 
-    req.user = { ...user, role: user.role.name };
+    req.user = { ...user, role: user.role.name, additionalRoles: user.additionalRoles || [] };
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {

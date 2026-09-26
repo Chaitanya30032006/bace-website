@@ -74,7 +74,11 @@ export default function Memories() {
   const filteredPhotos = photos.filter(photo => {
     const albumMatch = selectedAlbum === 'All' || photo.albumId === selectedAlbum;
     const yearMatch = selectedYear === 'All' || (photo.album && String(photo.album.year) === selectedYear);
-    return albumMatch && yearMatch;
+    const searchMatch = !searchQuery || 
+      (photo.album?.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (photo.album?.eventName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (photo.uploader?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    return albumMatch && yearMatch && searchMatch;
   });
 
   // Group photos by year → albums for the "All" view
@@ -99,6 +103,21 @@ export default function Memories() {
 
   const handleFileChange = (e) => {
     setUploadFile(Array.from(e.target.files));
+  };
+
+  const handleDeleteAlbum = async (albumId, albumTitle) => {
+    if (!confirm(`Delete album "${albumTitle}" and ALL its photos? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(apiUrl(`/api/gallery/albums/${albumId}`), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message);
+      fetchGalleryData();
+    } catch (err) {
+      alert(`Failed to delete album: ${err.message}`);
+    }
   };
 
   // Create album
@@ -276,13 +295,23 @@ export default function Memories() {
           {albumsForYear.map(album => {
             const count = photos.filter(p => p.albumId === album.id).length;
             return (
-              <button
-                key={album.id}
-                onClick={() => setSelectedAlbum(album.id)}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${selectedAlbum === album.id ? 'bg-saffron-600 text-white shadow-sm' : 'bg-orange-50/50 text-slate-600 hover:bg-orange-100/50 dark:bg-slate-900 dark:text-slate-400'}`}
-              >
-                {album.title} ({count})
-              </button>
+              <div key={album.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => setSelectedAlbum(album.id)}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${selectedAlbum === album.id ? 'bg-saffron-600 text-white shadow-sm' : 'bg-orange-50/50 text-slate-600 hover:bg-orange-100/50 dark:bg-slate-900 dark:text-slate-400'}`}
+                >
+                  {album.title} ({count})
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDeleteAlbum(album.id, album.title)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                    title="Delete album"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -402,6 +431,29 @@ export default function Memories() {
                 </button>
               </form>
             )}
+          </div>
+
+          {/* Albums Management */}
+          <div className="p-6 rounded-3xl glass-panel border border-orange-100/40 dark:border-slate-800 shadow-md flex flex-col gap-4">
+            <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
+              <FolderOpen className="h-4 w-4 text-saffron-600" />
+              Albums
+            </h3>
+            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+              {albums.map(album => (
+                <div key={album.id} className="flex items-center justify-between p-2 rounded-lg border border-slate-100 dark:border-slate-800 text-xs">
+                  <span className="font-medium text-slate-700 dark:text-slate-300 truncate">{album.title} ({album.year})</span>
+                  <button
+                    onClick={() => handleDeleteAlbum(album.id, album.title)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors shrink-0"
+                    title="Delete album"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              {albums.length === 0 && <span className="text-[10px] text-slate-400 italic">No albums yet.</span>}
+            </div>
           </div>
         </div>
         )}

@@ -20,6 +20,20 @@ enum MemberType {
   Volunteer
 }
 
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
 enum RequestStatus {
   Pending
   Approved
@@ -51,6 +65,8 @@ model User {
   uploadedPhotos     Photo[]             @relation("PhotoUploader")
   notifications      Notification[]
   auditLogs          AuditLog[]
+  passwordResetTokens PasswordResetToken[]
+  additionalRoles    String[]            @default([]) @map("additional_roles")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
 
@@ -83,6 +99,7 @@ model DevoteeProfile {
   devoteeId                String                    @unique @map("devotee_id")
   photographUrl            String?                   @map("photograph_url")
   center                   String?
+  serviceRoles             String[]                  @default([]) @map("service_roles")
   lockedSections           String[]                  @default([]) @map("locked_sections")
   monthlyFee               Float?                    @map("monthly_fee")
   depositAmount            Float?                    @map("deposit_amount")
@@ -100,6 +117,7 @@ model DevoteeProfile {
   chantingTimeline         ChantingTimeline[]
   devotionalCourses        DevotionalCourse[]
   bookProgress             BookReadingProgress[]
+  bookTestScores           BookTestScore[]
   monthlyPayments          MonthlyPayment[]
   editRequests             ProfileEditRequest[]
   leaveRequests            LeaveRequest[]
@@ -165,7 +183,10 @@ model MembershipInformation {
   profileId       String         @unique @map("profile_id") @db.Uuid
   memberId        String?        @map("member_id")
   memberType      MemberType     @default(General) @map("member_type")
+  memberGroups    String[]       @default([]) @map("member_groups")
+  subMemberGroups String[]       @default([]) @map("sub_member_groups")
   memberStatus    String         @default("Active") @map("member_status")
+  durationType    String         @default("Permanent") @map("duration_type")
   memberStartDate DateTime?      @map("member_start_date") @db.Date
   memberExpiryDate DateTime?     @map("member_expiry_date") @db.Date
   anniversaryInfo String?        @map("anniversary_info")
@@ -175,6 +196,7 @@ model MembershipInformation {
 
   @@index([memberType])
   @@index([memberStatus])
+  @@index([durationType])
   @@map("membership_information")
 }
 
@@ -184,8 +206,8 @@ model AddressInformation {
   type          String
   houseStreetPO String         @map("house_street_po")
   country       String         @default("India")
-  stateProvince String         @map("state_province")
-  cityDistrict  String         @map("city_district")
+  stateProvince String?        @map("state_province")
+  cityDistrict  String?        @map("city_district")
   pinZip        String?        @map("pin_zip")
   profile       DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   createdAt     DateTime       @default(now()) @map("created_at")
@@ -222,6 +244,7 @@ model EducationInformation {
   degree         String?
   specialization String?
   passingYear    Int?           @map("passing_year")
+  status         String?        @default("Completed")
   profile        DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
@@ -405,4 +428,56 @@ model LeaveRequest {
   @@index([profileId])
   @@index([fromDate])
   @@map("leave_requests")
+}
+
+model ServiceRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("service_roles")
+}
+
+model MemberGroupOption {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("member_group_options")
+}
+
+model SubMemberGroupOption {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("sub_member_group_options")
+}
+
+model BookTest {
+  id           String          @id @default(uuid()) @db.Uuid
+  bookName     String          @map("book_name")
+  totalMarks   Int             @map("total_marks")
+  passingMarks Int             @default(50) @map("passing_marks")
+  scores       BookTestScore[]
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  @@map("book_tests")
+}
+
+model BookTestScore {
+  id            String         @id @default(uuid()) @db.Uuid
+  profileId     String         @map("profile_id") @db.Uuid
+  bookTestId    String         @map("book_test_id") @db.Uuid
+  marksObtained Int            @map("marks_obtained")
+  profile       DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  bookTest      BookTest       @relation(fields: [bookTestId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  @@unique([profileId, bookTestId])
+  @@index([profileId])
+  @@index([bookTestId])
+  @@map("book_test_scores")
 }

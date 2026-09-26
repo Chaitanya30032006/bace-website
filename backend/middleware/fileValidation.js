@@ -38,8 +38,7 @@ function validateImageMagicBytes(req, res, next) {
 
   for (const file of files) {
     try {
-      const buffer = fs.readFileSync(file.path, { length: 12 });
-      // Read first 12 bytes
+      // Read first 12 bytes to check magic bytes
       const fd = fs.openSync(file.path, 'r');
       const headerBuf = Buffer.alloc(12);
       fs.readSync(fd, headerBuf, 0, 12, 0);

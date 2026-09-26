@@ -95,7 +95,7 @@ export default function Navbar() {
 
             {user && (
               <>
-                {user.role === 'Admin' ? (
+                {user.role === 'Admin' && (
                   <Link 
                     to="/admin" 
                     className={`flex items-center gap-1.5 text-sm font-semibold transition-colors hover:text-saffron-600 ${location.pathname === '/admin' ? 'text-saffron-600' : 'text-slate-600 dark:text-slate-300'}`}
@@ -103,15 +103,14 @@ export default function Navbar() {
                     <ShieldAlert className="h-4 w-4" />
                     Admin Panel
                   </Link>
-                ) : (
-                  <Link 
-                    to="/dashboard" 
-                    className={`flex items-center gap-1.5 text-sm font-semibold transition-colors hover:text-saffron-600 ${location.pathname === '/dashboard' ? 'text-saffron-600' : 'text-slate-600 dark:text-slate-300'}`}
-                  >
-                    <User className="h-4 w-4" />
-                    My Profile
-                  </Link>
                 )}
+                <Link 
+                  to="/dashboard" 
+                  className={`flex items-center gap-1.5 text-sm font-semibold transition-colors hover:text-saffron-600 ${location.pathname === '/dashboard' ? 'text-saffron-600' : 'text-slate-600 dark:text-slate-300'}`}
+                >
+                  <User className="h-4 w-4" />
+                  My Profile
+                </Link>
                 
                 <Link 
                   to="/memories" 
@@ -242,15 +241,14 @@ export default function Navbar() {
           
           {user && (
             <>
-              {user.role === 'Admin' ? (
+              {user.role === 'Admin' && (
                 <Link to="/admin" onClick={() => setIsOpen(false)} className="text-sm font-bold p-2 rounded-lg hover:bg-orange-50/50 dark:hover:bg-slate-800">
                   Admin Panel
                 </Link>
-              ) : (
-                <Link to="/dashboard" onClick={() => setIsOpen(false)} className="text-sm font-bold p-2 rounded-lg hover:bg-orange-50/50 dark:hover:bg-slate-800">
-                  My Profile
-                </Link>
               )}
+              <Link to="/dashboard" onClick={() => setIsOpen(false)} className="text-sm font-bold p-2 rounded-lg hover:bg-orange-50/50 dark:hover:bg-slate-800">
+                My Profile
+              </Link>
               <Link to="/memories" onClick={() => setIsOpen(false)} className="text-sm font-bold p-2 rounded-lg hover:bg-orange-50/50 dark:hover:bg-slate-800">
                 Memories
               </Link>

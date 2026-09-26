@@ -1,7 +1,7 @@
 import React from 'react';
 const { useState } = React;
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
+import { Mail, Lock, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import Logo from '../components/Logo';
 import { apiUrl } from '../config/api';
 import { saveAuthSession } from '../lib/auth';
@@ -12,6 +12,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,13 +90,20 @@ export default function Login() {
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-saffron-500 transition-all dark:text-white"
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-saffron-500 transition-all dark:text-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
@@ -109,11 +117,16 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="text-center text-xs text-slate-500 dark:text-slate-400">
-          Not a member yet?{' '}
-          <Link to="/register" className="font-bold text-saffron-600 hover:text-saffron-700">
-            Request Membership Approval
+        <div className="text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col gap-2">
+          <Link to="/forgot-password" className="font-bold text-saffron-600 hover:text-saffron-700">
+            Forgot Password?
           </Link>
+          <span>
+            Not a member yet?{' '}
+            <Link to="/register" className="font-bold text-saffron-600 hover:text-saffron-700">
+              Request Membership Approval
+            </Link>
+          </span>
         </div>
       </div>
     </div>

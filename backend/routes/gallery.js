@@ -225,9 +225,26 @@ router.delete('/photos/:id', authenticate, restrictTo('Admin'), async (req, res)
       return res.status(404).json({ message: 'Photo not found' });
     }
 
-    const filename = path.basename(photo.photoUrl);
-    const filepath = path.join(uploadDir, filename);
-    if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+    if (photo.photoUrl.startsWith('http')) {
+      // Cloudinary hosted — extract public ID (format: .../upload/v1234/bace/gallery/abc123.ext)
+      try {
+        const url = new URL(photo.photoUrl);
+        const pathParts = url.pathname.split('/');
+        const uploadIdx = pathParts.indexOf('upload');
+        if (uploadIdx !== -1) {
+          // Public ID is everything after "upload/vXXXX/" without file extension
+          const afterUpload = pathParts.slice(uploadIdx + 2); // skip 'upload' and version
+          const lastPart = afterUpload[afterUpload.length - 1];
+          afterUpload[afterUpload.length - 1] = lastPart.split('.')[0];
+          const publicId = afterUpload.join('/');
+          await cloudinary.uploader.destroy(publicId);
+        }
+      } catch {}
+    } else {
+      const filename = path.basename(photo.photoUrl);
+      const filepath = path.join(uploadDir, filename);
+      if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+    }
 
     await prisma.photo.delete({ where: { id: photo.id } });
 
@@ -272,7 +289,18 @@ router.post('/upload-bulk', authenticate, restrictTo('Admin'), upload.array('pho
     const uploaded = [];
 
     for (const file of req.files) {
-      const photoUrl = `/uploads/${file.filename}`;
+      let photoUrl;
+      if (isCloudinaryConfigured()) {
+        const result = await cloudinary.uploader.upload(file.path, {
+          folder: 'bace/gallery',
+          quality: 'auto',
+          fetch_format: 'auto'
+        });
+        photoUrl = result.secure_url;
+        fs.unlinkSync(file.path);
+      } else {
+        photoUrl = `/uploads/${file.filename}`;
+      }
       const photo = await prisma.photo.create({
         data: {
           albumId: album.id,
@@ -293,6 +321,54 @@ router.post('/upload-bulk', authenticate, restrictTo('Admin'), upload.array('pho
   } catch (error) {
     if (req.files) req.files.forEach((f) => fs.existsSync(f.path) && fs.unlinkSync(f.path));
     res.status(500).json({ message: 'Bulk upload failed', error: error.message });
+  }
+});
+
+// Delete album and all its photos
+router.delete('/albums/:id', authenticate, restrictTo('Admin'), async (req, res) => {
+  try {
+    const album = await prisma.album.findUnique({ where: { id: req.params.id } });
+    if (!album) {
+      return res.status(404).json({ message: 'Album not found' });
+    }
+
+    const photos = await prisma.photo.findMany({ where: { albumId: album.id } });
+
+    for (const photo of photos) {
+      if (photo.photoUrl.startsWith('http')) {
+        try {
+          const url = new URL(photo.photoUrl);
+          const pathParts = url.pathname.split('/');
+          const uploadIdx = pathParts.indexOf('upload');
+          if (uploadIdx !== -1) {
+            const afterUpload = pathParts.slice(uploadIdx + 2);
+            const lastPart = afterUpload[afterUpload.length - 1];
+            afterUpload[afterUpload.length - 1] = lastPart.split('.')[0];
+            const publicId = afterUpload.join('/');
+            await cloudinary.uploader.destroy(publicId);
+          }
+        } catch {}
+      } else {
+        const filename = path.basename(photo.photoUrl);
+        const filepath = path.join(uploadDir, filename);
+        if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+      }
+    }
+
+    await prisma.photo.deleteMany({ where: { albumId: album.id } });
+    await prisma.album.delete({ where: { id: album.id } });
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: req.user.id,
+        action: 'DELETE_ALBUM',
+        details: `Deleted album "${album.title}" (ID: ${album.id}) and ${photos.length} photo(s).`
+      }
+    });
+
+    res.status(200).json({ status: 'success', message: `Album "${album.title}" and ${photos.length} photo(s) deleted.` });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to delete album', error: error.message });
   }
 });
 

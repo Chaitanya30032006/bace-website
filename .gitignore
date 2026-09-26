@@ -4,3 +4,10 @@ dist/
 backend/uploads/
 *.log
 .DS_Store
+
+frontend.zip
+.kiro/
+.vscode/
+
+.kiro/
+.vscode/

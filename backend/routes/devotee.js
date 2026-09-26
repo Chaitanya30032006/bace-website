@@ -10,7 +10,8 @@ const {
   formatProfileForApi,
   profileInclude,
   computeBookProgress,
-  reverseMemberType
+  reverseMemberType,
+  reverseMemberGroups
 } = require('../lib/profileHelpers');
 const { authenticate, restrictTo } = require('../middleware/auth');
 const { validate, profileUpdateSchema, chantingSchema, courseSchema, educationSchema, bookProgressSchema } = require('../middleware/validate');
@@ -41,11 +42,16 @@ const profilePhotoUpload = multer({
   }
 });
 
-const checkAccess = (req, profileUserId) => req.user.role === 'Admin' || req.user.id === profileUserId;
+const checkAccess = (req, profileUserId) => req.user.role === 'Admin' || (req.user.additionalRoles || []).includes('Accountant') || req.user.id === profileUserId;
 
-router.get('/', authenticate, restrictTo('Admin'), async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
-    const { name, spiritualName, devoteeId, center, memberType, city, occupation } = req.query;
+    // Allow Admin or Accountant to view the full directory
+    if (req.user.role !== 'Admin' && !(req.user.additionalRoles || []).includes('Accountant')) {
+      return res.status(403).json({ message: 'You do not have permission to view the directory.' });
+    }
+
+    const { name, spiritualName, devoteeId, center, memberType, memberGroup, memberStatus, city, occupation } = req.query;
 
     const profiles = await prisma.devoteeProfile.findMany({
       where: {
@@ -56,6 +62,12 @@ router.get('/', authenticate, restrictTo('Admin'), async (req, res) => {
           : {}),
         ...(memberType
           ? { membershipInformation: { memberType: reverseMemberType(memberType) } }
+          : {}),
+        ...(memberGroup
+          ? { membershipInformation: { memberGroups: { has: memberGroup } } }
+          : {}),
+        ...(memberStatus
+          ? { membershipInformation: { memberStatus: { equals: memberStatus, mode: 'insensitive' } } }
           : {}),
         ...(occupation
           ? { personalInformation: { occupation: { contains: occupation, mode: 'insensitive' } } }
@@ -160,14 +172,6 @@ router.put('/:id', authenticate, validate(profileUpdateSchema), async (req, res)
       return res.status(403).json({ message: 'Access denied. You can only edit your own profile.' });
     }
 
-    // If profile is locked and user is not Admin, block the edit
-    if (profile.profileLocked && req.user.role !== 'Admin') {
-      return res.status(403).json({
-        message: 'Your profile is locked. Please request edit permission from the admin.',
-        profileLocked: true
-      });
-    }
-
     const { basicInfo, personalInfo, addressInfo, familyInfo, educationInfo, devotionalInfo, communicationInfo, membershipInfo } = req.body;
 
     // Per-section lock check for non-admin users
@@ -226,10 +230,12 @@ router.put('/:id', authenticate, validate(profileUpdateSchema), async (req, res)
           brahminInitiated: basicInfo.brahminInitiated,
           panNumber: basicInfo.panNumber,
           aadharNumber: basicInfo.aadharNumber,
-          previousReligion: basicInfo.previousReligion,
           firstLanguage: basicInfo.firstLanguage,
           languagesKnown: basicInfo.languagesKnown,
           citizenOf: basicInfo.citizenOf,
+          nativeCountry: basicInfo.nativeCountry,
+          nativeState: basicInfo.nativeState,
+          nativeCity: basicInfo.nativeCity,
           caste: basicInfo.caste
         },
         create: {
@@ -246,10 +252,12 @@ router.put('/:id', authenticate, validate(profileUpdateSchema), async (req, res)
           brahminInitiated: basicInfo.brahminInitiated ?? false,
           panNumber: basicInfo.panNumber,
           aadharNumber: basicInfo.aadharNumber,
-          previousReligion: basicInfo.previousReligion,
           firstLanguage: basicInfo.firstLanguage,
           languagesKnown: basicInfo.languagesKnown,
           citizenOf: basicInfo.citizenOf,
+          nativeCountry: basicInfo.nativeCountry,
+          nativeState: basicInfo.nativeState,
+          nativeCity: basicInfo.nativeCity,
           caste: basicInfo.caste
         }
       });
@@ -267,6 +275,7 @@ router.put('/:id', authenticate, validate(profileUpdateSchema), async (req, res)
           where: { profileId: profile.id },
           update: {
             memberType: basicInfo.memberType ? reverseMemberType(basicInfo.memberType) : undefined,
+            memberGroups: basicInfo.memberGroups ? reverseMemberGroups(basicInfo.memberGroups) : undefined,
             memberStatus: basicInfo.memberStatus,
             memberStartDate: basicInfo.memberStartDate ? new Date(basicInfo.memberStartDate) : null,
             memberExpiryDate: basicInfo.memberExpiryDate ? new Date(basicInfo.memberExpiryDate) : null
@@ -274,6 +283,7 @@ router.put('/:id', authenticate, validate(profileUpdateSchema), async (req, res)
           create: {
             profileId: profile.id,
             memberType: basicInfo.memberType ? reverseMemberType(basicInfo.memberType) : 'General',
+            memberGroups: basicInfo.memberGroups ? reverseMemberGroups(basicInfo.memberGroups) : [],
             memberStatus: basicInfo.memberStatus || 'Active',
             memberStartDate: basicInfo.memberStartDate ? new Date(basicInfo.memberStartDate) : null,
             memberExpiryDate: basicInfo.memberExpiryDate ? new Date(basicInfo.memberExpiryDate) : null
@@ -405,9 +415,7 @@ router.put('/:id', authenticate, validate(profileUpdateSchema), async (req, res)
       if (communicationInfo && !currentLocked.includes('communicationInfo')) newlyLocked.push('communicationInfo');
       if (addressInfo && addressInfo.length > 0 && !currentLocked.includes('addressInfo')) newlyLocked.push('addressInfo');
       if (familyInfo && !currentLocked.includes('familyInfo')) newlyLocked.push('familyInfo');
-      if (educationInfo && !currentLocked.includes('educationInfo')) newlyLocked.push('educationInfo');
       if (devotionalInfo && !currentLocked.includes('devotionalInfo')) newlyLocked.push('devotionalInfo');
-      if (membershipInfo && !currentLocked.includes('membershipInfo')) newlyLocked.push('membershipInfo');
 
       if (newlyLocked.length > 0) {
         await prisma.devoteeProfile.update({
@@ -434,6 +442,43 @@ router.delete('/:id', authenticate, restrictTo('Admin'), async (req, res) => {
     res.status(200).json({ status: 'success', message: 'Devotee profile and user account deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete devotee profile', error: error.message });
+  }
+});
+
+router.post('/:id/books', authenticate, async (req, res) => {
+  try {
+    const profile = await prisma.devoteeProfile.findUnique({ where: { id: req.params.id } });
+    if (!profile) return res.status(404).json({ message: 'Profile not found' });
+    if (!checkAccess(req, profile.userId)) return res.status(403).json({ message: 'Access denied' });
+
+    const { bookName, totalChapters } = req.body;
+    if (!bookName || !bookName.trim()) return res.status(400).json({ message: 'Book name is required' });
+    const chapters = parseInt(totalChapters, 10);
+    if (!chapters || chapters < 1) return res.status(400).json({ message: 'Total chapters must be at least 1' });
+
+    const book = await prisma.bookReadingProgress.create({
+      data: { profileId: profile.id, bookName: bookName.trim(), totalChapters: chapters, completedChapters: 0, readingPercentage: 0, status: 'Unread' }
+    });
+
+    res.status(201).json({ status: 'success', data: book });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to add book', error: error.message });
+  }
+});
+
+router.delete('/:id/books/:bookId', authenticate, async (req, res) => {
+  try {
+    const profile = await prisma.devoteeProfile.findUnique({ where: { id: req.params.id } });
+    if (!profile) return res.status(404).json({ message: 'Profile not found' });
+    if (!checkAccess(req, profile.userId)) return res.status(403).json({ message: 'Access denied' });
+
+    const book = await prisma.bookReadingProgress.findFirst({ where: { id: req.params.bookId, profileId: profile.id } });
+    if (!book) return res.status(404).json({ message: 'Book not found' });
+
+    await prisma.bookReadingProgress.delete({ where: { id: book.id } });
+    res.status(200).json({ status: 'success', message: 'Book removed' });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to delete book', error: error.message });
   }
 });
 
@@ -500,7 +545,7 @@ router.post('/:id/education', authenticate, validate(educationSchema), async (re
     if (!profile) return res.status(404).json({ message: 'Profile not found' });
     if (!checkAccess(req, profile.userId)) return res.status(403).json({ message: 'Access denied' });
 
-    const { qualification, school, college, degree, specialization, passingYear } = req.validatedBody;
+    const { qualification, school, college, degree, specialization, passingYear, status } = req.validatedBody;
     const edu = await prisma.educationInformation.create({
       data: {
         profileId: profile.id,
@@ -509,7 +554,8 @@ router.post('/:id/education', authenticate, validate(educationSchema), async (re
         college,
         degree,
         specialization,
-        passingYear
+        passingYear,
+        status
       }
     });
 
@@ -560,6 +606,57 @@ router.delete('/:id/education/:eduId', authenticate, async (req, res) => {
 
 // ── Monthly Payments Endpoints ──
 
+// Rent (Laxmi) overview: total monthly fee across all devotees + month-wise collection breakdown
+router.get('/rent/overview', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'Admin' && !(req.user.additionalRoles || []).includes('Accountant')) {
+      return res.status(403).json({ message: 'Only Admin or Accountant can view the rent overview.' });
+    }
+
+    const now = new Date();
+    const year = parseInt(req.query.year, 10) || now.getFullYear();
+    const month = parseInt(req.query.month, 10) || now.getMonth() + 1;
+
+    const profiles = await prisma.devoteeProfile.findMany({
+      where: { monthlyFee: { not: null, gt: 0 } },
+      select: { monthlyFee: true, devotionalInformation: { select: { dateJoined: true } } }
+    });
+    const totalMonthlyFee = profiles.reduce((sum, p) => sum + (p.monthlyFee || 0), 0);
+    const totalDevoteesWithFee = profiles.length;
+
+    // Only count devotees who had already joined by the end of the selected month
+    const endOfSelectedMonth = new Date(year, month, 0, 23, 59, 59, 999);
+    const dueProfiles = profiles.filter(p => {
+      const joined = p.devotionalInformation?.dateJoined;
+      return !joined || new Date(joined) <= endOfSelectedMonth;
+    });
+    const selectedExpected = dueProfiles.reduce((sum, p) => sum + (p.monthlyFee || 0), 0);
+    const selectedDevoteeCount = dueProfiles.length;
+
+    const payments = await prisma.monthlyPayment.findMany({
+      where: { status: 'Paid' },
+      select: { year: true, month: true, amount: true }
+    });
+
+    const byMonth = {};
+    for (const p of payments) {
+      const key = `${p.year}-${String(p.month).padStart(2, '0')}`;
+      if (!byMonth[key]) byMonth[key] = { year: p.year, month: p.month, totalCollected: 0, paidCount: 0 };
+      byMonth[key].totalCollected += p.amount || 0;
+      byMonth[key].paidCount += 1;
+    }
+
+    const monthly = Object.values(byMonth).sort((a, b) => (b.year - a.year) || (b.month - a.month));
+
+    res.json({
+      status: 'success',
+      data: { totalMonthlyFee, totalDevoteesWithFee, year, month, selectedExpected, selectedDevoteeCount, monthly }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to retrieve rent overview', error: error.message });
+  }
+});
+
 // Get payment history for a devotee
 router.get('/:id/payments', authenticate, async (req, res) => {
   try {
@@ -609,9 +706,14 @@ router.get('/:id/payments', authenticate, async (req, res) => {
   }
 });
 
-// Admin marks a month as paid/unpaid
-router.post('/:id/payments', authenticate, restrictTo('Admin'), async (req, res) => {
+// Admin or Accountant marks a month as paid/unpaid
+router.post('/:id/payments', authenticate, async (req, res) => {
   try {
+    // Allow Admin or users with Accountant additional role
+    if (req.user.role !== 'Admin' && !(req.user.additionalRoles || []).includes('Accountant')) {
+      return res.status(403).json({ message: 'Only Admin or Accountant can manage payments.' });
+    }
+
     const { year, month, status, amount, remarks } = req.body;
     if (!year || !month || !status) {
       return res.status(400).json({ message: 'year, month, and status are required' });
@@ -650,9 +752,13 @@ router.post('/:id/payments', authenticate, restrictTo('Admin'), async (req, res)
   }
 });
 
-// Admin sets monthly fee for a devotee
-router.put('/:id/monthly-fee', authenticate, restrictTo('Admin'), async (req, res) => {
+// Admin or Accountant sets monthly fee for a devotee
+router.put('/:id/monthly-fee', authenticate, async (req, res) => {
   try {
+    if (req.user.role !== 'Admin' && !(req.user.additionalRoles || []).includes('Accountant')) {
+      return res.status(403).json({ message: 'Only Admin or Accountant can manage fees.' });
+    }
+
     const { monthlyFee } = req.body;
     if (monthlyFee === undefined || monthlyFee === null) {
       return res.status(400).json({ message: 'monthlyFee is required' });
@@ -672,9 +778,13 @@ router.put('/:id/monthly-fee', authenticate, restrictTo('Admin'), async (req, re
   }
 });
 
-// Admin marks deposit as paid/unpaid
-router.put('/:id/deposit', authenticate, restrictTo('Admin'), async (req, res) => {
+// Admin or Accountant marks deposit as paid/unpaid
+router.put('/:id/deposit', authenticate, async (req, res) => {
   try {
+    if (req.user.role !== 'Admin' && !(req.user.additionalRoles || []).includes('Accountant')) {
+      return res.status(403).json({ message: 'Only Admin or Accountant can manage deposits.' });
+    }
+
     const { depositPaid, depositAmount, remarks } = req.body;
     if (depositPaid === undefined) {
       return res.status(400).json({ message: 'depositPaid is required' });
@@ -811,6 +921,193 @@ router.get('/:id/leave', authenticate, async (req, res) => {
     res.json({ status: 'success', data: leaves });
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch leave history', error: error.message });
+  }
+});
+
+// ── Book Test Scores ──
+
+// Get all book test scores for a devotee
+router.get('/:id/book-test-scores', authenticate, async (req, res) => {
+  try {
+    const profile = await prisma.devoteeProfile.findUnique({ where: { id: req.params.id } });
+    if (!profile) return res.status(404).json({ message: 'Profile not found' });
+    if (!checkAccess(req, profile.userId)) return res.status(403).json({ message: 'Access denied' });
+
+    const scores = await prisma.bookTestScore.findMany({
+      where: { profileId: profile.id },
+      include: { bookTest: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ status: 'success', data: scores });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch book test scores', error: error.message });
+  }
+});
+
+// Admin assigns a score to a devotee
+router.post('/:id/book-test-scores', authenticate, restrictTo('Admin'), async (req, res) => {
+  try {
+    const { bookTestId, marksObtained } = req.body;
+    if (!bookTestId || marksObtained === undefined || marksObtained === null) {
+      return res.status(400).json({ message: 'bookTestId and marksObtained are required' });
+    }
+
+    const parsedMarks = parseInt(marksObtained, 10);
+    if (isNaN(parsedMarks) || parsedMarks < 0) {
+      return res.status(400).json({ message: 'marksObtained must be a non-negative number' });
+    }
+
+    const profile = await prisma.devoteeProfile.findUnique({ where: { id: req.params.id } });
+    if (!profile) return res.status(404).json({ message: 'Profile not found' });
+
+    const bookTest = await prisma.bookTest.findUnique({ where: { id: bookTestId } });
+    if (!bookTest) return res.status(404).json({ message: 'Book test not found' });
+
+    if (parsedMarks > bookTest.totalMarks) {
+      return res.status(400).json({ message: `Marks obtained cannot exceed total marks (${bookTest.totalMarks})` });
+    }
+
+    // Check for duplicate
+    const existing = await prisma.bookTestScore.findUnique({
+      where: { profileId_bookTestId: { profileId: profile.id, bookTestId } }
+    });
+    if (existing) {
+      return res.status(409).json({ message: 'A score for this book test already exists for this devotee' });
+    }
+
+    const score = await prisma.bookTestScore.create({
+      data: {
+        profileId: profile.id,
+        bookTestId,
+        marksObtained: parsedMarks
+      },
+      include: { bookTest: true }
+    });
+
+    res.status(201).json({ status: 'success', data: score });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to assign book test score', error: error.message });
+  }
+});
+
+// Admin edits a score
+router.put('/:id/book-test-scores/:scoreId', authenticate, restrictTo('Admin'), async (req, res) => {
+  try {
+    const { marksObtained } = req.body;
+    if (marksObtained === undefined || marksObtained === null) {
+      return res.status(400).json({ message: 'marksObtained is required' });
+    }
+
+    const parsedMarks = parseInt(marksObtained, 10);
+    if (isNaN(parsedMarks) || parsedMarks < 0) {
+      return res.status(400).json({ message: 'marksObtained must be a non-negative number' });
+    }
+
+    const score = await prisma.bookTestScore.findFirst({
+      where: { id: req.params.scoreId, profileId: req.params.id },
+      include: { bookTest: true }
+    });
+    if (!score) return res.status(404).json({ message: 'Score not found' });
+
+    if (parsedMarks > score.bookTest.totalMarks) {
+      return res.status(400).json({ message: `Marks obtained cannot exceed total marks (${score.bookTest.totalMarks})` });
+    }
+
+    const updated = await prisma.bookTestScore.update({
+      where: { id: req.params.scoreId },
+      data: { marksObtained: parsedMarks },
+      include: { bookTest: true }
+    });
+
+    res.json({ status: 'success', data: updated });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update book test score', error: error.message });
+  }
+});
+
+// Admin deletes a score
+router.delete('/:id/book-test-scores/:scoreId', authenticate, restrictTo('Admin'), async (req, res) => {
+  try {
+    const score = await prisma.bookTestScore.findFirst({
+      where: { id: req.params.scoreId, profileId: req.params.id }
+    });
+    if (!score) return res.status(404).json({ message: 'Score not found' });
+
+    await prisma.bookTestScore.delete({ where: { id: req.params.scoreId } });
+
+    res.json({ status: 'success', message: 'Book test score deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to delete book test score', error: error.message });
+  }
+});
+
+// Birthdays for a given month (calendar view)
+router.get('/birthdays/month', authenticate, async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
+    const profiles = await prisma.devoteeProfile.findMany({
+      where: {
+        personalInformation: { dob: { not: null } },
+        user: { status: 'Approved' }
+      },
+      include: {
+        user: { select: { name: true } },
+        personalInformation: { select: { dob: true } }
+      }
+    });
+
+    const birthdays = profiles.filter(p => {
+      if (!p.personalInformation?.dob) return false;
+      const dob = new Date(p.personalInformation.dob);
+      return dob.getMonth() + 1 === month;
+    }).map(p => ({
+      devoteeId: p.devoteeId,
+      name: p.user.name,
+      photographUrl: p.photographUrl,
+      day: new Date(p.personalInformation.dob).getDate(),
+      dob: p.personalInformation.dob
+    })).sort((a, b) => a.day - b.day);
+
+    res.json({ status: 'success', data: birthdays });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch monthly birthdays', error: error.message });
+  }
+});
+
+// Today's birthdays
+router.get('/birthdays/today', authenticate, async (req, res) => {
+  try {
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const day = today.getDate();
+
+    // Find profiles where DOB month and day match today
+    const profiles = await prisma.devoteeProfile.findMany({
+      where: {
+        personalInformation: {
+          dob: { not: null }
+        }
+      },
+      include: {
+        user: { select: { name: true, status: true } },
+        personalInformation: { select: { dob: true } }
+      }
+    });
+
+    const birthdays = profiles.filter(p => {
+      if (!p.personalInformation?.dob || p.user?.status !== 'Approved') return false;
+      const dob = new Date(p.personalInformation.dob);
+      return dob.getMonth() + 1 === month && dob.getDate() === day;
+    }).map(p => ({
+      devoteeId: p.devoteeId,
+      name: p.user.name,
+      photographUrl: p.photographUrl
+    }));
+
+    res.status(200).json({ status: 'success', data: birthdays });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch birthdays', error: error.message });
   }
 });
 

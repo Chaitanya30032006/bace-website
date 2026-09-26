@@ -17,6 +17,7 @@ const profileInclude = {
       mobile: true,
       roleId: true,
       status: true,
+      additionalRoles: true,
       createdAt: true,
       updatedAt: true,
       role: { select: { name: true } },
@@ -40,13 +41,35 @@ const profileInclude = {
   devotionalInformation: true,
   chantingTimeline: true,
   devotionalCourses: true,
-  bookProgress: true
+  bookProgress: true,
+  bookTestScores: {
+    include: {
+      bookTest: {
+        select: {
+          id: true,
+          bookName: true,
+          totalMarks: true,
+          passingMarks: true
+        }
+      }
+    }
+  }
 };
 
 function formatDate(value) {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString().split('T')[0];
   return value;
+}
+
+function mapMemberGroups(arr) {
+  if (!arr || !Array.isArray(arr) || arr.length === 0) return [];
+  return arr;
+}
+
+function reverseMemberGroups(arr) {
+  if (!arr || !Array.isArray(arr)) return [];
+  return arr;
 }
 
 function mapMemberType(value) {
@@ -85,6 +108,7 @@ function formatProfileForApi(profile) {
     devoteeId: profile.devoteeId,
     photographUrl: profile.photographUrl,
     center: profile.center,
+    serviceRoles: profile.serviceRoles || [],
     lockedSections: profile.lockedSections || [],
     dateJoined: formatDate(devotional.dateJoined),
     spiritualName: personal.spiritualName,
@@ -103,13 +127,15 @@ function formatProfileForApi(profile) {
     aadharNumber: personal.aadharNumber,
     memberId: membership.memberId,
     memberType: mapMemberType(membership.memberType),
+    memberGroups: mapMemberGroups(membership.memberGroups),
+    subMemberGroups: mapMemberGroups(membership.subMemberGroups),
     memberStatus: membership.memberStatus,
+    durationType: membership.durationType || 'Permanent',
     memberStartDate: formatDate(membership.memberStartDate),
     memberExpiryDate: formatDate(membership.memberExpiryDate),
     anniversaryInfo: membership.anniversaryInfo,
     approvedByName: approvedRequest?.reviewer?.name || null,
     membershipApprovedAt: formatDate(approvedRequest?.reviewedAt),
-    previousReligion: personal.previousReligion,
     firstLanguage: personal.firstLanguage,
     languagesKnown: personal.languagesKnown,
     citizenOf: personal.citizenOf,
@@ -127,6 +153,7 @@ function formatProfileForApi(profile) {
           mobile: profile.user.mobile,
           roleId: profile.user.roleId,
           status: profile.user.status,
+          additionalRoles: profile.user.additionalRoles || [],
           createdAt: profile.user.createdAt,
           updatedAt: profile.user.updatedAt,
           role: profile.user.role?.name || profile.user.role
@@ -154,6 +181,16 @@ function formatProfileForApi(profile) {
     bookProgress: (profile.bookProgress || []).map((book) => ({
       ...book,
       lastReadDate: formatDate(book.lastReadDate)
+    })),
+    bookTestScores: (profile.bookTestScores || []).map((score) => ({
+      id: score.id,
+      bookTestId: score.bookTestId,
+      bookName: score.bookTest?.bookName || null,
+      totalMarks: score.bookTest?.totalMarks || null,
+      passingMarks: score.bookTest?.passingMarks ?? null,
+      marksObtained: score.marksObtained,
+      createdAt: score.createdAt,
+      updatedAt: score.updatedAt
     }))
   };
 }
@@ -180,58 +217,106 @@ async function createProfileForUser(user) {
 
   const isAdmin = user.role?.name === 'Admin' || user.role === 'Admin';
 
-  // Generate sequential member ID starting from 1
+  // Generate sequential member ID starting from 1 (use DB transaction to prevent race)
   let nextId = 1;
   if (!isAdmin) {
     const allProfiles = await prisma.devoteeProfile.findMany({
       where: { devoteeId: { startsWith: 'BACE-', not: 'BACE-ADMIN-108' } },
-      select: { devoteeId: true }
+      select: { devoteeId: true },
+      orderBy: { createdAt: 'asc' }
     });
-    let maxId = 0;
+    const usedIds = new Set();
     for (const p of allProfiles) {
       const num = parseInt(p.devoteeId.replace('BACE-', ''), 10);
-      if (!isNaN(num) && num > maxId) maxId = num;
+      if (!isNaN(num)) usedIds.add(num);
     }
-    nextId = maxId + 1;
+    while (usedIds.has(nextId)) nextId++;
   }
 
-  const profile = await prisma.devoteeProfile.create({
-    data: {
-      userId: user.id,
-      devoteeId: isAdmin ? 'BACE-ADMIN-108' : `BACE-${nextId}`,
-      center: isAdmin ? 'Mayapur' : null,
-      personalInformation: {
-        create: {
-          occupation: isAdmin ? 'Administrator' : null
+  try {
+    const profile = await prisma.devoteeProfile.create({
+      data: {
+        userId: user.id,
+        devoteeId: isAdmin ? 'BACE-ADMIN-108' : `BACE-${nextId}`,
+        center: isAdmin ? 'Mayapur' : null,
+        personalInformation: {
+          create: {
+            occupation: isAdmin ? 'Administrator' : null
+          }
+        },
+        communicationInformation: { create: {} },
+        membershipInformation: {
+          create: {
+            memberId: isAdmin ? '108' : String(nextId),
+            memberType: isAdmin ? 'Volunteer' : 'General',
+            memberStatus: user.status === 'Approved' ? 'Active' : 'Pending'
+          }
+        },
+        familyInformation: { create: {} },
+        devotionalInformation: {
+          create: {
+            spiritualGuide: isAdmin ? 'Srila Prabhupada' : null
+          }
+        },
+        bookProgress: {
+          create: DEFAULT_BOOKS.map((book) => ({
+            bookName: book.name,
+            totalChapters: book.chapters,
+            completedChapters: 0,
+            readingPercentage: 0,
+            status: 'Unread'
+          }))
         }
-      },
-      communicationInformation: { create: {} },
-      membershipInformation: {
-        create: {
-          memberId: isAdmin ? '108' : String(nextId),
-          memberType: isAdmin ? 'Volunteer' : 'General',
-          memberStatus: user.status === 'Approved' ? 'Active' : 'Pending'
-        }
-      },
-      familyInformation: { create: {} },
-      devotionalInformation: {
-        create: {
-          spiritualGuide: isAdmin ? 'Srila Prabhupada' : null
-        }
-      },
-      bookProgress: {
-        create: DEFAULT_BOOKS.map((book) => ({
-          bookName: book.name,
-          totalChapters: book.chapters,
-          completedChapters: 0,
-          readingPercentage: 0,
-          status: 'Unread'
-        }))
       }
-    }
-  });
+    });
 
-  return getProfileById(profile.id);
+    return getProfileById(profile.id);
+  } catch (err) {
+    // Handle unique constraint violation from race condition — retry once
+    if (err.code === 'P2002' && !isAdmin) {
+      const retryProfiles = await prisma.devoteeProfile.findMany({
+        where: { devoteeId: { startsWith: 'BACE-', not: 'BACE-ADMIN-108' } },
+        select: { devoteeId: true }
+      });
+      const retryUsedIds = new Set();
+      for (const p of retryProfiles) {
+        const num = parseInt(p.devoteeId.replace('BACE-', ''), 10);
+        if (!isNaN(num)) retryUsedIds.add(num);
+      }
+      let retryId = 1;
+      while (retryUsedIds.has(retryId)) retryId++;
+
+      const profile = await prisma.devoteeProfile.create({
+        data: {
+          userId: user.id,
+          devoteeId: `BACE-${retryId}`,
+          center: null,
+          personalInformation: { create: {} },
+          communicationInformation: { create: {} },
+          membershipInformation: {
+            create: {
+              memberId: String(retryId),
+              memberType: 'General',
+              memberStatus: user.status === 'Approved' ? 'Active' : 'Pending'
+            }
+          },
+          familyInformation: { create: {} },
+          devotionalInformation: { create: {} },
+          bookProgress: {
+            create: DEFAULT_BOOKS.map((book) => ({
+              bookName: book.name,
+              totalChapters: book.chapters,
+              completedChapters: 0,
+              readingPercentage: 0,
+              status: 'Unread'
+            }))
+          }
+        }
+      });
+      return getProfileById(profile.id);
+    }
+    throw err;
+  }
 }
 
 async function repairMissingProfiles() {
@@ -269,5 +354,7 @@ module.exports = {
   repairMissingProfiles,
   computeBookProgress,
   reverseMemberType,
-  mapMemberType
+  mapMemberType,
+  mapMemberGroups,
+  reverseMemberGroups
 };

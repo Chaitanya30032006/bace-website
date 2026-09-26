@@ -2,7 +2,7 @@ import React from 'react';
 const { useState, useEffect } = React;
 import { 
   User, ShieldAlert, Award, BookOpen, MapPin, 
-  Users, GraduationCap, Heart, Briefcase, Plus, Trash2, Edit2, Check, X, ClipboardList, Activity, Lock, Clock, IndianRupee, Plane 
+  Users, GraduationCap, Heart, Briefcase, Plus, Trash2, Edit2, Check, X, ClipboardList, Activity, Lock, Clock, IndianRupee, Plane, Cake 
 } from 'lucide-react';
 
 import { API_BASE, apiUrl } from '../config/api';
@@ -32,6 +32,14 @@ const getPhotoUrl = (url) => {
 
 export default function Dashboard() {
   const token = localStorage.getItem('bace_token');
+  const currentUser = JSON.parse(localStorage.getItem('bace_user') || '{}');
+  const isAdmin = currentUser?.role === 'Admin';
+  const [isAccountant, setIsAccountant] = useState((currentUser?.additionalRoles || []).includes('Accountant'));
+  
+  // Check if admin is editing another devotee's profile
+  const urlParams = new URLSearchParams(window.location.search);
+  const editProfileId = urlParams.get('editProfile');
+  
   const [profileData, setProfileData] = useState(null);
   const [activeTab, setActiveTab] = useState('Basic Info');
   const [isEditing, setIsEditing] = useState(false);
@@ -56,6 +64,8 @@ export default function Dashboard() {
   const [booksList, setBooksList] = useState([]);
   const [paymentsList, setPaymentsList] = useState([]);
   const [paymentSummary, setPaymentSummary] = useState(null);
+  const [leaveHistory, setLeaveHistory] = useState([]);
+  const [selectedPaymentYear, setSelectedPaymentYear] = useState(new Date().getFullYear());
   const [currentAddress, setCurrentAddress] = useState(emptyAddress('Current'));
   const [nativeAddress, setNativeAddress] = useState(emptyAddress('Native'));
 
@@ -63,6 +73,24 @@ export default function Dashboard() {
   const [newEdu, setNewEdu] = useState({ qualification: '', school: '', college: '', degree: '', passingYear: '' });
   const [newChanting, setNewChanting] = useState({ rounds: 16, startDate: '' });
   const [newCourse, setNewCourse] = useState({ courseName: '', completionYear: '', status: 'Completed' });
+  const [newBook, setNewBook] = useState({ bookName: '', totalChapters: '' });
+  const [addingBook, setAddingBook] = useState(false);
+  const [todayBirthdays, setTodayBirthdays] = useState([]);
+  const [birthdayCalMonth, setBirthdayCalMonth] = useState(new Date().getMonth() + 1);
+  const [birthdayCalData, setBirthdayCalData] = useState([]);
+  const [loadingBirthdays, setLoadingBirthdays] = useState(false);
+
+  // Accountant: manage others' payments
+  const [accDevotees, setAccDevotees] = useState([]);
+  const [accSearch, setAccSearch] = useState('');
+  const [accSelectedProfile, setAccSelectedProfile] = useState(null);
+  const [accPayments, setAccPayments] = useState([]);
+  const [accPaySummary, setAccPaySummary] = useState(null);
+  const [accPayYear, setAccPayYear] = useState(new Date().getFullYear());
+  const [accLoading, setAccLoading] = useState(false);
+  const [rentOverview, setRentOverview] = useState(null);
+  const [rentOverviewYear, setRentOverviewYear] = useState(new Date().getFullYear());
+  const [rentOverviewMonth, setRentOverviewMonth] = useState(new Date().getMonth() + 1);
 
   const tabs = [
     { name: 'Basic Info', icon: User },
@@ -75,24 +103,49 @@ export default function Dashboard() {
     { name: 'Payments', icon: IndianRupee },
     { name: 'Leave', icon: Plane },
     { name: 'Membership Info', icon: Award },
-    { name: 'Book Reading', icon: BookOpen }
+    { name: 'Book Reading', icon: BookOpen },
+    { name: 'Book Test Marks', icon: Award },
+    { name: 'Birthday Calendar', icon: Cake },
+    ...(isAccountant || isAdmin ? [{ name: 'Manage Payments', icon: IndianRupee }] : [])
   ];
 
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const res = await fetch(apiUrl('/api/auth/me'), {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message);
-
-      const user = json.data?.user || {};
-      const prof = json.data?.profile || {};
+      
+      let prof, user;
+      
+      if (editProfileId && isAdmin) {
+        // Admin editing another devotee's profile
+        const res = await fetch(apiUrl(`/api/devotees/${editProfileId}`), {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message);
+        prof = json.data || {};
+        user = prof.user || {};
+      } else {
+        // Normal: load own profile
+        const res = await fetch(apiUrl('/api/auth/me'), {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message);
+        user = json.data?.user || {};
+        prof = json.data?.profile || {};
+      }
       if (!prof.id) {
         throw new Error('Profile not found. Please contact the administrator.');
       }
       setProfileData({ ...prof, user });
+
+      // Update localStorage with fresh user data (includes additionalRoles)
+      if (user && !editProfileId) {
+        const storedUser = JSON.parse(localStorage.getItem('bace_user') || '{}');
+        const updatedUser = { ...storedUser, additionalRoles: user.additionalRoles || [] };
+        localStorage.setItem('bace_user', JSON.stringify(updatedUser));
+        setIsAccountant((user.additionalRoles || []).includes('Accountant'));
+      }
 
       // Populate forms
       setBasicForm({
@@ -113,10 +166,12 @@ export default function Dashboard() {
         panNumber: prof.panNumber || '',
         aadharNumber: prof.aadharNumber || '',
         photographUrl: prof.photographUrl || '',
-        previousReligion: prof.previousReligion || '',
         firstLanguage: prof.firstLanguage || '',
         languagesKnown: prof.languagesKnown || '',
         citizenOf: prof.citizenOf || '',
+        nativeCountry: prof.nativeCountry || '',
+        nativeState: prof.nativeState || '',
+        nativeCity: prof.nativeCity || '',
         caste: prof.caste || ''
       });
 
@@ -137,7 +192,7 @@ export default function Dashboard() {
       });
 
       setDevotionalForm({
-        dateJoined: prof.devotionalInfo?.dateJoined || '',
+        dateJoined: prof.devotionalInfo?.dateJoined ? prof.devotionalInfo.dateJoined.split('T')[0] : '',
         introducedBy: prof.devotionalInfo?.introducedBy || '',
         introducedWhen: prof.devotionalInfo?.introducedWhen || '',
         firstConnectedCenter: prof.devotionalInfo?.firstConnectedCenter || '',
@@ -163,6 +218,17 @@ export default function Dashboard() {
           setPaymentSummary(payJson.data.summary || null);
         }
       } catch { setPaymentsList([]); setPaymentSummary(null); }
+
+      // Fetch leave history
+      try {
+        const leaveRes = await fetch(apiUrl(`/api/devotees/${prof.id}/leave`), {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const leaveJson = await leaveRes.json();
+        if (leaveJson.status === 'success') {
+          setLeaveHistory(leaveJson.data || []);
+        }
+      } catch { setLeaveHistory([]); }
 
       // Fetch per-section lock status
       if (prof.lockedSections && prof.lockedSections.length > 0) {
@@ -192,6 +258,83 @@ export default function Dashboard() {
   useEffect(() => {
     fetchProfile();
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(apiUrl('/api/devotees/birthdays/today'), {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(json => { if (json.status === 'success') setTodayBirthdays(json.data || []); })
+      .catch(() => {});
+  }, [token]);
+
+  // Fetch birthday calendar for selected month
+  useEffect(() => {
+    if (!token || activeTab !== 'Birthday Calendar') return;
+    setLoadingBirthdays(true);
+    fetch(apiUrl(`/api/devotees/birthdays/month?month=${birthdayCalMonth}`), {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(json => { if (json.status === 'success') setBirthdayCalData(json.data || []); })
+      .catch(() => {})
+      .finally(() => setLoadingBirthdays(false));
+  }, [token, birthdayCalMonth, activeTab]);
+
+  // Accountant or Admin: fetch devotee list when tab is opened
+  useEffect(() => {
+    if (!token || (!isAccountant && !isAdmin) || activeTab !== 'Manage Payments') return;
+    if (accDevotees.length > 0) return; // already fetched
+    fetch(apiUrl('/api/devotees'), { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(json => { if (json.status === 'success') setAccDevotees(json.data || []); })
+      .catch(() => {});
+  }, [token, activeTab, isAccountant, isAdmin]);
+
+  // Fetch rent (Laxmi) overview when Manage Payments tab is opened or selection changes
+  useEffect(() => {
+    if (!token || (!isAccountant && !isAdmin) || activeTab !== 'Manage Payments') return;
+    fetch(apiUrl(`/api/devotees/rent/overview?year=${rentOverviewYear}&month=${rentOverviewMonth}`), { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(json => { if (json.status === 'success') setRentOverview(json.data); })
+      .catch(() => {});
+  }, [token, activeTab, isAccountant, isAdmin, rentOverviewYear, rentOverviewMonth]);
+
+  // Accountant: fetch selected devotee's payments
+  const fetchAccPayments = async (profId) => {
+    setAccLoading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/devotees/${profId}/payments`), { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setAccPayments(json.data.payments || []);
+        setAccPaySummary(json.data.summary || null);
+      }
+    } catch { setAccPayments([]); setAccPaySummary(null); }
+    finally { setAccLoading(false); }
+  };
+
+  const accTogglePayment = async (year, month, currentStatus) => {
+    if (!accSelectedProfile) return;
+    const newStatus = currentStatus === 'Paid' ? 'Unpaid' : 'Paid';
+    let amount = null;
+    if (newStatus === 'Paid') {
+      const fee = accPaySummary?.monthlyFee || '';
+      const input = prompt(`Enter paid amount (₹):`, fee);
+      if (input === null) return;
+      amount = parseFloat(input) || null;
+    }
+    const remarks = prompt('Remark (optional):', '') || null;
+    try {
+      await fetch(apiUrl(`/api/devotees/${accSelectedProfile.id}/payments`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ year, month, status: newStatus, amount, remarks })
+      });
+      fetchAccPayments(accSelectedProfile.id);
+    } catch (err) { console.error(err); }
+  };
 
   // Calculate Profile Completion
   const calculateCompletion = () => {
@@ -242,13 +385,11 @@ export default function Dashboard() {
         payload.familyInfo = familyForm;
         break;
       case 'Education':
-        payload.educationInfo = educationList;
         break;
       case 'Devotional':
         payload.devotionalInfo = devotionalForm;
         break;
       case 'Membership Info':
-        payload.membershipInfo = basicForm;
         break;
       default:
         payload.basicInfo = basicForm;
@@ -345,16 +486,23 @@ export default function Dashboard() {
   };
 
   // Add education record
+  const [addingEdu, setAddingEdu] = useState(false);
   const handleAddEducation = async (e) => {
     e.preventDefault();
+    if (addingEdu) return;
+    setAddingEdu(true);
     try {
+      const payload = {
+        ...newEdu,
+        passingYear: newEdu.passingYear ? parseInt(newEdu.passingYear, 10) : null
+      };
       const res = await fetch(apiUrl(`/api/devotees/${profileData.id}/education`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(newEdu)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         setNewEdu({ qualification: '', school: '', college: '', degree: '', passingYear: '' });
@@ -362,6 +510,8 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setAddingEdu(false);
     }
   };
 
@@ -379,10 +529,13 @@ export default function Dashboard() {
   };
 
   // Add Chanting Record
+  const [addingChanting, setAddingChanting] = useState(false);
   const handleAddChanting = async (e) => {
     e.preventDefault();
+    if (addingChanting) return;
+    setAddingChanting(true);
     try {
-      await fetch(apiUrl(`/api/devotees/${profileData.id}/chanting`), {
+      const res = await fetch(apiUrl(`/api/devotees/${profileData.id}/chanting`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -391,28 +544,41 @@ export default function Dashboard() {
         body: JSON.stringify(newChanting)
       });
       setNewChanting({ rounds: 16, startDate: '' });
-      fetchProfile();
+      if (res.ok) fetchProfile();
     } catch (err) {
       console.error(err);
+    } finally {
+      setAddingChanting(false);
     }
   };
 
   // Add Devotional Course
+  const [addingCourse, setAddingCourse] = useState(false);
   const handleAddCourse = async (e) => {
     e.preventDefault();
+    if (addingCourse) return;
+    setAddingCourse(true);
     try {
-      await fetch(apiUrl(`/api/devotees/${profileData.id}/courses`), {
+      const payload = {
+        ...newCourse,
+        completionYear: newCourse.completionYear ? parseInt(newCourse.completionYear, 10) : null
+      };
+      const res = await fetch(apiUrl(`/api/devotees/${profileData.id}/courses`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(newCourse)
+        body: JSON.stringify(payload)
       });
-      setNewCourse({ courseName: '', completionYear: '', status: 'Completed' });
-      fetchProfile();
+      if (res.ok) {
+        setNewCourse({ courseName: '', completionYear: '', status: 'Completed' });
+        fetchProfile();
+      }
     } catch (err) {
       console.error(err);
+    } finally {
+      setAddingCourse(false);
     }
   };
 
@@ -436,6 +602,35 @@ export default function Dashboard() {
     }
   };
 
+  const handleAddBook = async (e) => {
+    e.preventDefault();
+    if (!newBook.bookName.trim() || !newBook.totalChapters) return;
+    setAddingBook(true);
+    try {
+      const res = await fetch(apiUrl(`/api/devotees/${profileData.id}/books`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bookName: newBook.bookName.trim(), totalChapters: parseInt(newBook.totalChapters) })
+      });
+      if (res.ok) {
+        setNewBook({ bookName: '', totalChapters: '' });
+        fetchProfile();
+      }
+    } catch (err) { console.error(err); }
+    finally { setAddingBook(false); }
+  };
+
+  const handleDeleteBook = async (bookId) => {
+    if (!confirm('Remove this book from your reading list?')) return;
+    try {
+      await fetch(apiUrl(`/api/devotees/${profileData.id}/books/${bookId}`), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchProfile();
+    } catch (err) { console.error(err); }
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-orange-50/10 dark:bg-slate-950">
@@ -451,6 +646,31 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 bg-orange-50/10 dark:bg-slate-950 min-h-screen transition-colors">
+
+      {/* Birthday Banner */}
+      {todayBirthdays.length > 0 && (
+        <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-pink-50 to-amber-50 dark:from-pink-950/20 dark:to-amber-950/20 border border-pink-100/50 dark:border-pink-900/30 shadow-sm relative">
+          <button onClick={() => setTodayBirthdays([])} className="absolute top-3 right-3 p-1 rounded-lg hover:bg-pink-100 dark:hover:bg-pink-900/30 text-pink-400 hover:text-pink-600 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-2xl">🎂</span>
+            <h3 className="font-extrabold text-sm text-pink-700 dark:text-pink-400">Today's Birthday{todayBirthdays.length > 1 ? 's' : ''}!</h3>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {todayBirthdays.map(b => (
+              <div key={b.devoteeId} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-900/50 border border-pink-100 dark:border-pink-900/30">
+                <img src={getPhotoUrl(b.photographUrl)} alt={b.name} className="h-9 w-9 rounded-full object-cover border border-pink-200" />
+                <div className="flex flex-col">
+                  <span className="font-bold text-sm text-slate-800 dark:text-white">{b.name}</span>
+                  <span className="text-[10px] text-slate-400">{b.devoteeId}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-pink-600/70 dark:text-pink-400/50 mt-2 font-medium">Hare Krishna! Wishing a wonderful birthday 🙏</p>
+        </div>
+      )}
       
       {/* Dashboard Top Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 p-6 rounded-3xl glass-panel border border-orange-100/40 dark:border-slate-800 shadow-md">
@@ -469,6 +689,20 @@ export default function Dashboard() {
             <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mt-0.5">
               Devotee ID: <span className="text-saffron-700 dark:text-saffron-400">{profileData?.devoteeId}</span>
             </p>
+            {(profileData?.serviceRoles || []).length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {profileData.serviceRoles.map(r => (
+                  <span key={r} className="px-2 py-0.5 rounded text-[9px] font-bold bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">{r}</span>
+                ))}
+              </div>
+            )}
+            {(profileData?.memberGroups || []).length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {profileData.memberGroups.map(g => (
+                  <span key={g} className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">{g}</span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -497,9 +731,11 @@ export default function Dashboard() {
       )}
 
       {error && (
-        <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-950/50 text-sm font-semibold flex items-center gap-2">
-          <X className="h-5 w-5" />
-          {error}
+        <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-950/50 text-sm font-semibold flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2"><X className="h-5 w-5" />{error}</span>
+          <button onClick={() => setError('')} className="p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors shrink-0">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -531,7 +767,7 @@ export default function Dashboard() {
           <div className="flex justify-between items-center border-b border-orange-100/20 dark:border-slate-800 pb-4">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">{activeTab}</h2>
             
-            {activeTab !== 'Payments' && activeTab !== 'Book Reading' && (() => {
+            {activeTab !== 'Payments' && activeTab !== 'Book Reading' && activeTab !== 'Manage Payments' && activeTab !== 'Birthday Calendar' && (() => {
               const tabToSection = {
                 'Basic Info': 'basicInfo',
                 'Personal': 'personalInfo',
@@ -676,6 +912,40 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              <div className="md:col-span-2 border-t border-orange-100/10 dark:border-slate-800 pt-4 flex flex-col gap-4">
+                <h3 className="font-bold text-xs uppercase tracking-wider text-saffron-700 dark:text-saffron-400">Personal Background</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-500">First Language</label>
+                    <input disabled={!isEditing} value={basicForm.firstLanguage || ''} onChange={e => setBasicForm({ ...basicForm, firstLanguage: e.target.value })} placeholder="e.g. Marathi" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-500">Languages Known</label>
+                    <input disabled={!isEditing} value={basicForm.languagesKnown || ''} onChange={e => setBasicForm({ ...basicForm, languagesKnown: e.target.value })} placeholder="e.g. Hindi, English, Marathi" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-500">Citizen Of</label>
+                    <input disabled={!isEditing} value={basicForm.citizenOf || ''} onChange={e => setBasicForm({ ...basicForm, citizenOf: e.target.value })} placeholder="e.g. India" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-500">Native Country</label>
+                    <input disabled={!isEditing} value={basicForm.nativeCountry || ''} onChange={e => setBasicForm({ ...basicForm, nativeCountry: e.target.value })} placeholder="e.g. India" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-500">Native State</label>
+                    <input disabled={!isEditing} value={basicForm.nativeState || ''} onChange={e => setBasicForm({ ...basicForm, nativeState: e.target.value })} placeholder="e.g. Maharashtra" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-500">Native City</label>
+                    <input disabled={!isEditing} value={basicForm.nativeCity || ''} onChange={e => setBasicForm({ ...basicForm, nativeCity: e.target.value })} placeholder="e.g. Pune" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-500">Caste</label>
+                    <input disabled={!isEditing} value={basicForm.caste || ''} onChange={e => setBasicForm({ ...basicForm, caste: e.target.value })} placeholder="e.g. Brahmin" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -723,7 +993,6 @@ export default function Dashboard() {
               <div className="flex flex-col gap-1 md:col-span-2">
                 <label className="text-xs font-bold text-slate-500">Email Address (Registered)</label>
                 <input disabled={true} value={profileData?.user?.email || ''} className="p-2 border rounded-lg bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800 opacity-75" />
-                <span className="text-[10px] text-slate-400 mt-1">Contact Nigdi center support (info@bace-nigdi.org) to change registered email.</span>
               </div>
             </div>
           )}
@@ -802,7 +1071,7 @@ export default function Dashboard() {
                     <div key={edu.id} className="p-4 border border-slate-200 dark:border-slate-800 rounded-2xl flex justify-between items-center bg-orange-50/10 dark:bg-slate-900/10">
                       <div className="flex flex-col gap-0.5">
                         <span className="font-bold">{edu.degree} ({edu.qualification})</span>
-                        <span className="text-xs text-slate-500">{edu.college || edu.school} - Completed {edu.passingYear}</span>
+                        <span className="text-xs text-slate-500">{edu.college || edu.school} - {edu.passingYear || ''}</span>
                       </div>
                       {isEditing && (
                         <button onClick={() => handleDeleteEducation(edu.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors">
@@ -822,8 +1091,8 @@ export default function Dashboard() {
                     <input required value={newEdu.degree} onChange={e => setNewEdu({ ...newEdu, degree: e.target.value })} placeholder="Degree / Specialization" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
                     <input value={newEdu.college} onChange={e => setNewEdu({ ...newEdu, college: e.target.value })} placeholder="College / University" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
                     <input value={newEdu.passingYear} onChange={e => setNewEdu({ ...newEdu, passingYear: e.target.value })} placeholder="Year of Passing (YYYY)" className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800" />
-                    <button type="submit" className="md:col-span-2 flex items-center justify-center gap-1.5 p-2 rounded-xl bg-saffron-600 text-white font-bold text-xs">
-                      <Plus className="h-4 w-4" /> Save Academic Record
+                    <button type="submit" disabled={addingEdu} className="md:col-span-2 flex items-center justify-center gap-1.5 p-2 rounded-xl bg-saffron-600 text-white font-bold text-xs disabled:opacity-50">
+                      <Plus className="h-4 w-4" /> {addingEdu ? 'Saving...' : 'Save Academic Record'}
                     </button>
                   </div>
                 </form>
@@ -867,7 +1136,7 @@ export default function Dashboard() {
                   {chantingList.map(ch => (
                     <div key={ch.id} className="p-3 border border-slate-100 dark:border-slate-800 rounded-xl bg-orange-50/10 dark:bg-slate-900/10 flex justify-between items-center text-xs">
                       <span className="font-bold text-saffron-800 dark:text-saffron-400">{ch.rounds} Rounds Chanting</span>
-                      <span className="text-slate-400 font-medium">Chanting from {new Date(ch.startDate).toLocaleDateString()}</span>
+                      <span className="text-slate-400 font-medium">Chanting from {new Date(ch.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                     </div>
                   ))}
                 </div>
@@ -882,7 +1151,7 @@ export default function Dashboard() {
                       <label className="text-[10px] font-bold text-slate-500">Start Date</label>
                       <input type="date" required value={newChanting.startDate} onChange={e => setNewChanting({ ...newChanting, startDate: e.target.value })} className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800 text-xs" />
                     </div>
-                    <button type="submit" className="p-2.5 rounded-lg bg-saffron-600 text-white font-bold text-xs shrink-0 h-9">
+                    <button type="submit" disabled={addingChanting} className="p-2.5 rounded-lg bg-saffron-600 text-white font-bold text-xs shrink-0 h-9 disabled:opacity-50">
                       Add Chanting Milestone
                     </button>
                   </form>
@@ -914,8 +1183,8 @@ export default function Dashboard() {
                       <label className="text-[10px] font-bold text-slate-500">Year</label>
                       <input placeholder="e.g. 2022" value={newCourse.completionYear} onChange={e => setNewCourse({ ...newCourse, completionYear: e.target.value })} className="p-2 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800 text-xs" />
                     </div>
-                    <button type="submit" className="p-2.5 rounded-lg bg-saffron-600 text-white font-bold text-xs h-9">
-                      Add Course
+                    <button type="submit" disabled={addingCourse} className="p-2.5 rounded-lg bg-saffron-600 text-white font-bold text-xs h-9 disabled:opacity-50">
+                      {addingCourse ? 'Adding...' : 'Add Course'}
                     </button>
                   </form>
                 )}
@@ -954,50 +1223,63 @@ export default function Dashboard() {
               {(() => {
                 const currentYear = new Date().getFullYear();
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                const years = [currentYear, currentYear - 1];
+                const yearOptions = Array.from({ length: currentYear - 2019 }, (_, i) => currentYear - i);
+                const year = selectedPaymentYear;
 
-                return years.map(year => (
-                  <div key={year} className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-orange-50/10 dark:bg-slate-900/10">
-                    <h4 className="font-extrabold text-slate-800 dark:text-white text-base mb-4">{year}</h4>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                      {months.map((monthName, idx) => {
-                        const monthNum = idx + 1;
-                        const payment = paymentsList.find(p => p.year === year && p.month === monthNum);
-                        const isPaid = payment?.status === 'Paid';
-                        const isFuture = year === currentYear && monthNum > new Date().getMonth() + 1;
-                        const fee = paymentSummary?.monthlyFee || 0;
-                        const paidAmt = payment?.amount || 0;
-                        const remaining = isPaid ? 0 : fee - paidAmt;
-
-                        return (
-                          <div
-                            key={monthNum}
-                            className={`flex flex-col items-center p-2.5 rounded-xl border text-center ${
-                              isFuture
-                                ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 opacity-50'
-                                : isPaid
-                                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20'
-                                  : 'border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-900/20'
-                            }`}
-                          >
-                            <span className="text-[10px] font-bold text-slate-500">{monthName}</span>
-                            <span className={`text-xs font-extrabold mt-0.5 ${
-                              isFuture ? 'text-slate-400' : isPaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                            }`}>
-                              {isFuture ? '—' : isPaid ? '✓ Paid' : '✗ Unpaid'}
-                            </span>
-                            {!isFuture && (
-                              <>
-                                <span className="text-[9px] text-emerald-500 mt-0.5">₹{paidAmt}</span>
-                                <span className="text-[9px] text-rose-500">Rem: ₹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
+                return (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs font-bold text-slate-500">Select Year</label>
+                      <select
+                        value={selectedPaymentYear}
+                        onChange={e => setSelectedPaymentYear(parseInt(e.target.value))}
+                        className="p-2 border rounded-xl bg-transparent border-slate-200 dark:border-slate-800 text-sm font-bold dark:text-white"
+                      >
+                        {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
                     </div>
-                  </div>
-                ));
+                    <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-orange-50/10 dark:bg-slate-900/10">
+                      <h4 className="font-extrabold text-slate-800 dark:text-white text-base mb-4">{year}</h4>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                        {months.map((monthName, idx) => {
+                          const monthNum = idx + 1;
+                          const payment = paymentsList.find(p => p.year === year && p.month === monthNum);
+                          const isPaid = payment?.status === 'Paid';
+                          const isFuture = year === currentYear && monthNum > new Date().getMonth() + 1;
+                          const fee = paymentSummary?.monthlyFee || 0;
+                          const paidAmt = payment?.amount || 0;
+
+                          return (
+                            <div
+                              key={monthNum}
+                              className={`flex flex-col items-center p-2.5 rounded-xl border text-center ${
+                                isFuture
+                                  ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 opacity-50'
+                                  : isPaid
+                                    ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20'
+                                    : 'border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-900/20'
+                              }`}
+                            >
+                              <span className="text-[10px] font-bold text-slate-500">{monthName}</span>
+                              <span className={`text-xs font-extrabold mt-0.5 ${
+                                isFuture ? 'text-slate-400' : isPaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                              }`}>
+                                {isFuture ? '—' : isPaid ? '✓ Paid' : '✗ Unpaid'}
+                              </span>
+                              {!isFuture && (
+                                <>
+                                  <span className="text-[9px] text-emerald-500 mt-0.5">₹{paidAmt}</span>
+                                  <span className="text-[9px] text-rose-500">Rem: ₹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
+                                  {payment?.remarks && <span className="text-[8px] text-slate-400 italic truncate w-full">{payment.remarks}</span>}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                );
               })()}
             </div>
           )}
@@ -1022,6 +1304,7 @@ export default function Dashboard() {
                     return;
                   }
                   try {
+                    e.target.querySelector('button[type=submit]').disabled = true;
                     const res = await fetch(apiUrl(`/api/devotees/${profileData.id}/leave`), {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -1031,10 +1314,12 @@ export default function Dashboard() {
                     if (res.ok) {
                       alert('Leave submitted successfully!');
                       form.reset();
+                      fetchProfile();
                     } else {
                       alert(json.message || 'Failed to submit');
                     }
                   } catch { alert('Failed to submit leave request'); }
+                  finally { e.target.querySelector('button[type=submit]').disabled = false; }
                 }}
                 className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 flex flex-col gap-4"
               >
@@ -1061,6 +1346,31 @@ export default function Dashboard() {
                   Submit Leave
                 </button>
               </form>
+
+              {/* Leave History */}
+              {leaveHistory.length > 0 && (
+                <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 flex flex-col gap-3">
+                  <h4 className="font-bold text-sm text-slate-800 dark:text-white">Leave History</h4>
+                  <div className="flex flex-col gap-2">
+                    {leaveHistory.map(leave => (
+                      <div key={leave.id} className="p-3 border border-slate-100 dark:border-slate-800 rounded-xl bg-orange-50/10 dark:bg-slate-900/10 flex flex-col gap-1 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-slate-700 dark:text-slate-200">{leave.destination}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            leave.status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                            leave.status === 'Rejected' ? 'bg-red-50 text-red-600' :
+                            'bg-amber-50 text-amber-600'
+                          }`}>{leave.status}</span>
+                        </div>
+                        <span className="text-slate-400">
+                          {new Date(leave.fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} — {new Date(leave.toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        </span>
+                        {leave.reason && <span className="text-slate-500 italic">{leave.reason}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1079,7 +1389,7 @@ export default function Dashboard() {
               <div className="flex flex-col gap-1 p-4 rounded-2xl bg-orange-50/30 dark:bg-slate-900/30 border border-orange-100/30 dark:border-slate-800">
                 <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Membership Start Date</span>
                 <span className="font-extrabold text-slate-800 dark:text-white text-base">
-                  {profileData?.memberStartDate ? new Date(profileData.memberStartDate).toLocaleDateString() : 'Pending'}
+                  {profileData?.memberStartDate ? new Date(profileData.memberStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Pending'}
                 </span>
               </div>
 
@@ -1102,12 +1412,12 @@ export default function Dashboard() {
           {activeTab === 'Book Reading' && (
             <div className="flex flex-col gap-6 text-sm">
               <p className="text-xs text-slate-400">Log your completed chapters for Srila Prabhupada's translations to update progress bars automatically.</p>
-              
+
               <div className="flex flex-col gap-6">
                 {booksList.map(book => (
                   <div key={book.id} className="p-5 border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col gap-4 bg-orange-50/10 dark:bg-slate-900/10 shadow-sm">
                     {/* Header */}
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-extrabold text-slate-800 dark:text-white text-base">{book.bookName}</h4>
                         <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -1115,9 +1425,18 @@ export default function Dashboard() {
                         </span>
                       </div>
                       
-                      <div className="text-right">
-                        <span className="text-sm font-extrabold text-saffron-700 dark:text-saffron-400">{book.readingPercentage}%</span>
-                        <p className="text-[10px] text-slate-400">{book.completedChapters} of {book.totalChapters} chapters</p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="text-sm font-extrabold text-saffron-700 dark:text-saffron-400">{book.readingPercentage}%</span>
+                          <p className="text-[10px] text-slate-400">{book.completedChapters} of {book.totalChapters} chapters</p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteBook(book.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                          title="Remove book"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
 
@@ -1129,7 +1448,7 @@ export default function Dashboard() {
                     {/* Chapter updates & Notes */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Log Completed Chapters</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Completed Chapters</label>
                         <input
                           type="number"
                           max={book.totalChapters}
@@ -1152,7 +1471,311 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
+
+                {/* Add new book */}
+                <form onSubmit={handleAddBook} className="p-5 border-2 border-dashed border-orange-200 dark:border-slate-700 rounded-2xl flex flex-wrap items-end gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-40">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Book Name</label>
+                    <input
+                      placeholder="e.g. Bhagavad Gita"
+                      value={newBook.bookName}
+                      onChange={(e) => setNewBook(b => ({ ...b, bookName: e.target.value }))}
+                      className="p-1.5 border rounded-lg bg-transparent border-slate-200 dark:border-slate-700 text-xs w-full dark:text-white"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Chapters</label>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="18"
+                      value={newBook.totalChapters}
+                      onChange={(e) => setNewBook(b => ({ ...b, totalChapters: e.target.value }))}
+                      className="p-1.5 border rounded-lg bg-transparent border-slate-200 dark:border-slate-700 text-xs w-24 text-center dark:text-white"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={addingBook || !newBook.bookName.trim() || !newBook.totalChapters}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-saffron-100 dark:bg-saffron-900/30 text-saffron-700 dark:text-saffron-300 text-xs font-bold hover:bg-saffron-200 transition-colors disabled:opacity-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Book
+                  </button>
+                </form>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'Book Test Marks' && (
+            <div className="flex flex-col gap-4 text-sm">
+              <p className="text-xs text-slate-400">Your book test scores recorded by the administrator.</p>
+              {!profileData?.bookTestScores || profileData.bookTestScores.length === 0 ? (
+                <div className="p-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-center text-slate-400 text-xs">
+                  No book test scores have been recorded yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-700 bg-orange-50/40 dark:bg-slate-900/40">
+                        <th className="text-left py-3 px-4 font-bold text-slate-500 uppercase tracking-wider">Book Name</th>
+                        <th className="text-center py-3 px-4 font-bold text-slate-500 uppercase tracking-wider">Total Marks</th>
+                        <th className="text-center py-3 px-4 font-bold text-slate-500 uppercase tracking-wider">Marks Obtained</th>
+                        <th className="text-center py-3 px-4 font-bold text-slate-500 uppercase tracking-wider">Percentage</th>
+                        <th className="text-center py-3 px-4 font-bold text-slate-500 uppercase tracking-wider">Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {profileData.bookTestScores.map(score => {
+                        const pct = score.totalMarks > 0 ? Math.round((score.marksObtained / score.totalMarks) * 100) : 0;
+                        const threshold = score.passingMarks ?? Math.ceil((score.totalMarks || 100) * 0.5);
+                        const passed = score.marksObtained >= threshold;
+                        return (
+                          <tr key={score.id} className="border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-orange-50/10 dark:hover:bg-slate-900/10">
+                            <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">{score.bookName || '—'}</td>
+                            <td className="py-3 px-4 text-center text-slate-500">{score.totalMarks ?? '—'}</td>
+                            <td className="py-3 px-4 text-center font-bold text-saffron-700 dark:text-saffron-400">{score.marksObtained}</td>
+                            <td className="py-3 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400">{pct}%</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${passed ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'}`}>
+                                {passed ? 'Pass' : 'Fail'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'Birthday Calendar' && (
+            <div className="flex flex-col gap-5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-400">Birthdays of fellow devotees this month</p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setBirthdayCalMonth(m => m <= 1 ? 12 : m - 1)} className="p-1.5 rounded-lg hover:bg-orange-50 dark:hover:bg-slate-800 text-slate-500 transition-colors text-sm font-bold">&lt;</button>
+                  <select value={birthdayCalMonth} onChange={e => setBirthdayCalMonth(parseInt(e.target.value))} className="p-2 border rounded-xl bg-transparent border-slate-200 dark:border-slate-800 text-xs font-bold dark:text-white">
+                    {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, i) => (
+                      <option key={i+1} value={i+1}>{name}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => setBirthdayCalMonth(m => m >= 12 ? 1 : m + 1)} className="p-1.5 rounded-lg hover:bg-orange-50 dark:hover:bg-slate-800 text-slate-500 transition-colors text-sm font-bold">&gt;</button>
+                </div>
+              </div>
+
+              {loadingBirthdays ? (
+                <div className="py-8 flex justify-center"><Activity className="h-6 w-6 animate-spin text-saffron-600" /></div>
+              ) : birthdayCalData.length === 0 ? (
+                <p className="text-sm text-slate-400 italic py-6 text-center">No birthdays in this month.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {birthdayCalData.map(b => (
+                    <div key={b.devoteeId} className="flex items-center gap-3 p-3 rounded-xl border border-pink-100/50 dark:border-pink-900/30 bg-pink-50/30 dark:bg-pink-950/10">
+                      <img
+                        src={b.photographUrl && b.photographUrl.startsWith('http') ? b.photographUrl : getPhotoUrl(b.photographUrl)}
+                        alt={b.name}
+                        className="h-12 w-12 rounded-full object-cover border-2 border-pink-200 dark:border-pink-800"
+                        onError={e => { e.target.src = DEFAULT_AVATAR; }}
+                      />
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="font-bold text-sm text-slate-800 dark:text-white truncate">{b.name}</span>
+                        <span className="text-[10px] text-slate-400">{b.devoteeId}</span>
+                      </div>
+                      <div className="flex flex-col items-center shrink-0">
+                        <span className="text-2xl font-extrabold text-pink-600 dark:text-pink-400">{b.day}</span>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase">
+                          {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][birthdayCalMonth - 1]}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manage Payments (Accountant only) */}
+          {activeTab === 'Manage Payments' && (isAccountant || isAdmin) && (
+            <div className="flex flex-col gap-5">
+              <p className="text-xs text-slate-400">Search for a devotee and manage their monthly payment records.</p>
+
+              {/* Rent (Laxmi) overview */}
+              {rentOverview && (() => {
+                const selected = rentOverview.monthly.find(m => m.year === rentOverviewYear && m.month === rentOverviewMonth);
+                const collected = selected?.totalCollected || 0;
+                const paidCount = selected?.paidCount || 0;
+                const monthLabel = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][rentOverviewMonth - 1];
+                return (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-end gap-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Year</label>
+                        <select value={rentOverviewYear} onChange={e => setRentOverviewYear(parseInt(e.target.value))} className="p-1.5 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800 text-xs font-bold dark:text-white">
+                          {Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => new Date().getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Month</label>
+                        <select value={rentOverviewMonth} onChange={e => setRentOverviewMonth(parseInt(e.target.value))} className="p-1.5 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800 text-xs font-bold dark:text-white">
+                          {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((name, idx) => <option key={idx} value={idx + 1}>{name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20">
+                        <span className="text-[9px] font-bold uppercase text-slate-500">Total Rent Due — {monthLabel} {rentOverviewYear}</span>
+                        <p className="text-lg font-extrabold text-blue-600">₹{rentOverview.selectedExpected.toLocaleString('en-IN')}</p>
+                        <span className="text-[9px] text-slate-400">Sum of individual rent amounts across {rentOverview.selectedDevoteeCount} devotee(s)</span>
+                      </div>
+                      <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20">
+                        <span className="text-[9px] font-bold uppercase text-slate-500">Actually Paid — {monthLabel} {rentOverviewYear}</span>
+                        <p className="text-lg font-extrabold text-emerald-600">₹{collected.toLocaleString('en-IN')}</p>
+                        <span className="text-[9px] text-slate-400">{paidCount} / {rentOverview.selectedDevoteeCount} devotees paid</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Search */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={accSearch}
+                  onChange={e => setAccSearch(e.target.value)}
+                  placeholder="Search by name..."
+                  className="flex-1 p-2.5 border rounded-xl bg-transparent border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-saffron-500 dark:text-white"
+                />
+              </div>
+
+              {/* Devotee list (filtered) */}
+              {!accSelectedProfile && (
+                <div className="flex flex-col gap-1 max-h-[28rem] overflow-y-auto">
+                  {accDevotees
+                    .filter(d => (d.user?.name || '').toLowerCase().includes(accSearch.toLowerCase()))
+                    .sort((a, b) => (parseInt((a.devoteeId || '').replace('BACE-', ''), 10) || 0) - (parseInt((b.devoteeId || '').replace('BACE-', ''), 10) || 0))
+                    .map(d => (
+                      <button
+                        key={d.id}
+                        onClick={() => { setAccSelectedProfile(d); fetchAccPayments(d.id); }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-orange-50 dark:hover:bg-slate-800 text-left transition-colors border border-transparent hover:border-saffron-200 dark:hover:border-slate-700"
+                      >
+                        <img src={getPhotoUrl(d.photographUrl)} alt="" className="h-8 w-8 rounded-full object-cover border border-slate-200" />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-slate-800 dark:text-white">{d.user?.name}</span>
+                          <span className="text-[10px] text-slate-400">{d.devoteeId}</span>
+                        </div>
+                      </button>
+                    ))}
+                  {accDevotees.length === 0 && <p className="text-xs text-slate-400 italic py-4 text-center">Loading devotees...</p>}
+                </div>
+              )}
+
+              {/* Selected devotee payment management */}
+              {accSelectedProfile && (
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-saffron-50/50 dark:bg-saffron-950/20 border border-saffron-100 dark:border-saffron-900/30">
+                    <div className="flex items-center gap-3">
+                      <img src={getPhotoUrl(accSelectedProfile.photographUrl)} alt="" className="h-10 w-10 rounded-full object-cover border border-saffron-200" />
+                      <div>
+                        <span className="font-bold text-sm text-slate-800 dark:text-white">{accSelectedProfile.user?.name}</span>
+                        <span className="text-[10px] text-slate-400 ml-2">{accSelectedProfile.devoteeId}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => { setAccSelectedProfile(null); setAccPayments([]); setAccPaySummary(null); }} className="text-[10px] font-bold text-slate-500 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  {/* Fee controls */}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={async () => {
+                        const fee = prompt('Set monthly fee (₹):', accPaySummary?.monthlyFee || '');
+                        if (fee === null) return;
+                        await fetch(apiUrl(`/api/devotees/${accSelectedProfile.id}/monthly-fee`), {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ monthlyFee: fee })
+                        });
+                        fetchAccPayments(accSelectedProfile.id);
+                      }}
+                      className="text-[10px] px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold"
+                    >
+                      Set Monthly Fee {accPaySummary?.monthlyFee ? `(₹${accPaySummary.monthlyFee})` : ''}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const amt = prompt('Deposit amount (₹):', accPaySummary?.depositAmount || '');
+                        if (amt === null) return;
+                        await fetch(apiUrl(`/api/devotees/${accSelectedProfile.id}/deposit`), {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ depositPaid: true, depositAmount: amt })
+                        });
+                        fetchAccPayments(accSelectedProfile.id);
+                      }}
+                      className="text-[10px] px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold"
+                    >
+                      {accPaySummary?.depositPaid ? `✓ Deposit ₹${accPaySummary.depositAmount}` : 'Mark Deposit Paid'}
+                    </button>
+                  </div>
+
+                  {/* Payment grid */}
+                  {accLoading ? (
+                    <div className="py-6 flex justify-center"><Activity className="h-6 w-6 animate-spin text-saffron-600" /></div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Year</label>
+                        <select value={accPayYear} onChange={e => setAccPayYear(parseInt(e.target.value))} className="p-1.5 border rounded-lg bg-transparent border-slate-200 dark:border-slate-800 text-xs font-bold dark:text-white">
+                          {Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => new Date().getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                        {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((monthName, idx) => {
+                          const monthNum = idx + 1;
+                          const payment = accPayments.find(p => p.year === accPayYear && p.month === monthNum);
+                          const isPaid = payment?.status === 'Paid';
+                          const isFuture = accPayYear === new Date().getFullYear() && monthNum > new Date().getMonth() + 1;
+                          const fee = accPaySummary?.monthlyFee || 0;
+                          const paidAmt = payment?.amount || 0;
+                          return (
+                            <button
+                              key={monthNum}
+                              disabled={isFuture}
+                              onClick={() => accTogglePayment(accPayYear, monthNum, isPaid ? 'Paid' : 'Unpaid')}
+                              className={`flex flex-col items-center p-2 rounded-lg border text-center transition-all ${
+                                isFuture ? 'border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed'
+                                : isPaid ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 cursor-pointer'
+                                : 'border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100 cursor-pointer'
+                              }`}
+                              title={isFuture ? 'Future month' : `Click to mark as ${isPaid ? 'Unpaid' : 'Paid'}`}
+                            >
+                              <span className="text-[9px] font-bold text-slate-500">{monthName}</span>
+                              <span className={`text-[10px] font-extrabold ${isFuture ? 'text-slate-400' : isPaid ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {isFuture ? '—' : isPaid ? '✓ Paid' : '✗ Due'}
+                              </span>
+                              {!isFuture && (
+                                <>
+                                  <span className="text-[8px] text-emerald-500">₹{paidAmt}</span>
+                                  <span className="text-[8px] text-rose-500">Rem: ₹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
+                                  {payment?.remarks && <span className="text-[7px] text-slate-400 italic truncate w-full">{payment.remarks}</span>}
+                                </>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[9px] text-slate-400">Click a month to toggle Paid/Unpaid</p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

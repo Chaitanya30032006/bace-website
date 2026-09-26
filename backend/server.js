@@ -19,6 +19,11 @@ const exportRoutes = require('./routes/export');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy so Express reads real client IPs from X-Forwarded-For
+// (required behind Nginx, Render, or any reverse proxy — without this,
+//  rate limiters treat ALL users as a single IP and block everyone)
+app.set('trust proxy', 1);
+
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is required. PostgreSQL must be configured — SQLite is not supported.');
   process.exit(1);
@@ -63,6 +68,12 @@ app.use('/uploads', (req, res, next) => {
 
 // Global rate limit
 app.use('/api', apiLimiter);
+
+// Cache public stats for 5 minutes (most-hit unauthenticated endpoint)
+app.use('/api/auth/public-stats', (req, res, next) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  next();
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/devotees', devoteeRoutes);
