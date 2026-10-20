@@ -321,7 +321,7 @@ export default function Dashboard() {
     let amount = null;
     if (newStatus === 'Paid') {
       const fee = accPaySummary?.monthlyFee || '';
-      const input = prompt(`Enter paid amount (â‚¹):`, fee);
+      const input = prompt(`Enter paid amount (₹):`, fee);
       if (input === null) return;
       amount = parseFloat(input) || null;
     }
@@ -1199,7 +1199,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 text-center">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Monthly Fee</span>
-                    <p className="text-lg font-extrabold text-blue-600 dark:text-blue-400">â‚¹{paymentSummary.monthlyFee || 0}</p>
+                    <p className="text-lg font-extrabold text-blue-600 dark:text-blue-400">₹{paymentSummary.monthlyFee || 0}</p>
                   </div>
                   <div className={`p-4 rounded-2xl border text-center ${
                     paymentSummary.depositPaid
@@ -1210,7 +1210,7 @@ export default function Dashboard() {
                     <p className={`text-lg font-extrabold ${
                       paymentSummary.depositPaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
                     }`}>
-                      {paymentSummary.depositPaid ? `âœ“ â‚¹${paymentSummary.depositAmount || 0}` : 'Not Paid'}
+                      {paymentSummary.depositPaid ? `âœ“ ₹${paymentSummary.depositAmount || 0}` : 'Not Paid'}
                     </p>
                     {paymentSummary.depositRemarks && (
                       <span className="text-[9px] text-slate-400">{paymentSummary.depositRemarks}</span>
@@ -1268,8 +1268,8 @@ export default function Dashboard() {
                               </span>
                               {!isFuture && (
                                 <>
-                                  <span className="text-[9px] text-emerald-500 mt-0.5">â‚¹{paidAmt}</span>
-                                  <span className="text-[9px] text-rose-500">Rem: â‚¹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
+                                  <span className="text-[9px] text-emerald-500 mt-0.5">₹{paidAmt}</span>
+                                  <span className="text-[9px] text-rose-500">Rem: ₹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
                                   {payment?.remarks && <span className="text-[8px] text-slate-400 italic truncate w-full">{payment.remarks}</span>}
                                 </>
                               )}
@@ -1625,11 +1625,11 @@ export default function Dashboard() {
                     <div className="flex flex-col items-end shrink-0">
                       {paid ? (
                         <>
-                          <span className="text-[11px] font-bold text-emerald-600">â‚¹{d.amountPaid.toLocaleString('en-IN')}</span>
-                          {d.remaining > 0 && <span className="text-[9px] text-rose-500">Rem: â‚¹{d.remaining.toLocaleString('en-IN')}</span>}
+                          <span className="text-[11px] font-bold text-emerald-600">₹{d.amountPaid.toLocaleString('en-IN')}</span>
+                          {d.remaining > 0 && <span className="text-[9px] text-rose-500">Rem: ₹{d.remaining.toLocaleString('en-IN')}</span>}
                         </>
                       ) : (
-                        <span className="text-[11px] font-bold text-rose-600">â‚¹{d.monthlyFee.toLocaleString('en-IN')}</span>
+                        <span className="text-[11px] font-bold text-rose-600">₹{d.monthlyFee.toLocaleString('en-IN')}</span>
                       )}
                     </div>
                   </button>
@@ -1654,12 +1654,12 @@ export default function Dashboard() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20">
                         <span className="text-[9px] font-bold uppercase text-slate-500">Total Rent Due â€” {monthLabel} {rentOverviewYear}</span>
-                        <p className="text-lg font-extrabold text-blue-600">â‚¹{rentOverview.selectedExpected.toLocaleString('en-IN')}</p>
+                        <p className="text-lg font-extrabold text-blue-600">₹{rentOverview.selectedExpected.toLocaleString('en-IN')}</p>
                         <span className="text-[9px] text-slate-400">Sum of rent amounts for {rentOverview.selectedDevoteeCount} active devotee(s)</span>
                       </div>
                       <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20">
                         <span className="text-[9px] font-bold uppercase text-slate-500">Actually Paid â€” {monthLabel} {rentOverviewYear}</span>
-                        <p className="text-lg font-extrabold text-emerald-600">â‚¹{collected.toLocaleString('en-IN')}</p>
+                        <p className="text-lg font-extrabold text-emerald-600">₹{collected.toLocaleString('en-IN')}</p>
                         <span className="text-[9px] text-slate-400">{paidCount} / {rentOverview.selectedDevoteeCount} devotees paid</span>
                       </div>
                     </div>
@@ -1745,7 +1745,7 @@ export default function Dashboard() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={async () => {
-                        const fee = prompt('Set monthly fee (â‚¹):', accPaySummary?.monthlyFee || '');
+                        const fee = prompt('Set monthly fee (₹):', accPaySummary?.monthlyFee || '');
                         if (fee === null) return;
                         await fetch(apiUrl(`/api/devotees/${accSelectedProfile.id}/monthly-fee`), {
                           method: 'PUT',
@@ -1756,11 +1756,11 @@ export default function Dashboard() {
                       }}
                       className="text-[10px] px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold"
                     >
-                      Set Monthly Fee {accPaySummary?.monthlyFee ? `(â‚¹${accPaySummary.monthlyFee})` : ''}
+                      Set Monthly Fee {accPaySummary?.monthlyFee ? `(₹${accPaySummary.monthlyFee})` : ''}
                     </button>
                     <button
                       onClick={async () => {
-                        const amt = prompt('Deposit amount (â‚¹):', accPaySummary?.depositAmount || '');
+                        const amt = prompt('Deposit amount (₹):', accPaySummary?.depositAmount || '');
                         if (amt === null) return;
                         await fetch(apiUrl(`/api/devotees/${accSelectedProfile.id}/deposit`), {
                           method: 'PUT',
@@ -1771,7 +1771,7 @@ export default function Dashboard() {
                       }}
                       className="text-[10px] px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold"
                     >
-                      {accPaySummary?.depositPaid ? `âœ“ Deposit â‚¹${accPaySummary.depositAmount}` : 'Mark Deposit Paid'}
+                      {accPaySummary?.depositPaid ? `âœ“ Deposit ₹${accPaySummary.depositAmount}` : 'Mark Deposit Paid'}
                     </button>
                   </div>
 
@@ -1812,8 +1812,8 @@ export default function Dashboard() {
                               </span>
                               {!isFuture && (
                                 <>
-                                  <span className="text-[8px] text-emerald-500">â‚¹{paidAmt}</span>
-                                  <span className="text-[8px] text-rose-500">Rem: â‚¹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
+                                  <span className="text-[8px] text-emerald-500">₹{paidAmt}</span>
+                                  <span className="text-[8px] text-rose-500">Rem: ₹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
                                   {payment?.remarks && <span className="text-[7px] text-slate-400 italic truncate w-full">{payment.remarks}</span>}
                                 </>
                               )}

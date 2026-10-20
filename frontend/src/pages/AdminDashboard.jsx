@@ -702,11 +702,11 @@ export default function AdminDashboard() {
                 <div className="flex flex-col items-end shrink-0">
                   {paid ? (
                     <>
-                      <span className="text-xs font-bold text-emerald-600">Ã¢â€šÂ¹{d.amountPaid.toLocaleString('en-IN')}</span>
-                      {d.remaining > 0 && <span className="text-[10px] text-rose-500">Rem: Ã¢â€šÂ¹{d.remaining.toLocaleString('en-IN')}</span>}
+                      <span className="text-xs font-bold text-emerald-600">₹{d.amountPaid.toLocaleString('en-IN')}</span>
+                      {d.remaining > 0 && <span className="text-[10px] text-rose-500">Rem: ₹{d.remaining.toLocaleString('en-IN')}</span>}
                     </>
                   ) : (
-                    <span className="text-xs font-bold text-rose-600">Ã¢â€šÂ¹{d.monthlyFee.toLocaleString('en-IN')}</span>
+                    <span className="text-xs font-bold text-rose-600">₹{d.monthlyFee.toLocaleString('en-IN')}</span>
                   )}
                 </div>
               </button>
@@ -730,13 +730,13 @@ export default function AdminDashboard() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-5 rounded-2xl glass-panel border border-orange-100/30 dark:border-slate-800 shadow-sm flex flex-col gap-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Total Rent Due Ã¢â‚¬â€ {monthName(rentMonth)} {rentYear}</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">Ã¢â€šÂ¹{rentOverview.selectedExpected.toLocaleString('en-IN')}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Total Rent Due - {monthName(rentMonth)} {rentYear}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">₹{rentOverview.selectedExpected.toLocaleString('en-IN')}</span>
                     <span className="text-[10px] text-slate-400">Sum of rent amounts for {rentOverview.selectedDevoteeCount} active devotee(s) who had joined by then</span>
                   </div>
                   <div className="p-5 rounded-2xl glass-panel border border-orange-100/30 dark:border-slate-800 shadow-sm flex flex-col gap-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Actually Paid Ã¢â‚¬â€ {monthName(rentMonth)} {rentYear}</span>
-                    <span className="text-2xl font-extrabold text-emerald-600">Ã¢â€šÂ¹{collected.toLocaleString('en-IN')}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Actually Paid - {monthName(rentMonth)} {rentYear}</span>
+                    <span className="text-2xl font-extrabold text-emerald-600">₹{collected.toLocaleString('en-IN')}</span>
                     <span className="text-[10px] text-slate-400">{paidCount} / {rentOverview.selectedDevoteeCount} devotees paid</span>
                   </div>
                 </div>
