@@ -299,7 +299,7 @@ export default function Dashboard() {
       .then(res => res.json())
       .then(json => { if (json.status === 'success') setRentOverview(json.data); })
       .catch(() => {});
-  }, [token, activeTab, isAccountant, isAdmin, rentOverviewYear, rentOverviewMonth]);
+  }, [token, activeTab, isAccountant, isAdmin, rentOverviewYear, rentOverviewMonth, accSelectedProfile]);
 
   // Accountant: fetch selected devotee's payments
   const fetchAccPayments = async (profId) => {
@@ -321,7 +321,7 @@ export default function Dashboard() {
     let amount = null;
     if (newStatus === 'Paid') {
       const fee = accPaySummary?.monthlyFee || '';
-      const input = prompt(`Enter paid amount (₹):`, fee);
+      const input = prompt(`Enter paid amount (â‚¹):`, fee);
       if (input === null) return;
       amount = parseFloat(input) || null;
     }
@@ -654,7 +654,7 @@ export default function Dashboard() {
             <X className="h-4 w-4" />
           </button>
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-2xl">🎂</span>
+            <span className="text-2xl">ðŸŽ‚</span>
             <h3 className="font-extrabold text-sm text-pink-700 dark:text-pink-400">Today's Birthday{todayBirthdays.length > 1 ? 's' : ''}!</h3>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -668,7 +668,7 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-pink-600/70 dark:text-pink-400/50 mt-2 font-medium">Hare Krishna! Wishing a wonderful birthday 🙏</p>
+          <p className="text-[10px] text-pink-600/70 dark:text-pink-400/50 mt-2 font-medium">Hare Krishna! Wishing a wonderful birthday ðŸ™</p>
         </div>
       )}
       
@@ -1199,7 +1199,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 text-center">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Monthly Fee</span>
-                    <p className="text-lg font-extrabold text-blue-600 dark:text-blue-400">₹{paymentSummary.monthlyFee || 0}</p>
+                    <p className="text-lg font-extrabold text-blue-600 dark:text-blue-400">â‚¹{paymentSummary.monthlyFee || 0}</p>
                   </div>
                   <div className={`p-4 rounded-2xl border text-center ${
                     paymentSummary.depositPaid
@@ -1210,7 +1210,7 @@ export default function Dashboard() {
                     <p className={`text-lg font-extrabold ${
                       paymentSummary.depositPaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
                     }`}>
-                      {paymentSummary.depositPaid ? `✓ ₹${paymentSummary.depositAmount || 0}` : 'Not Paid'}
+                      {paymentSummary.depositPaid ? `âœ“ â‚¹${paymentSummary.depositAmount || 0}` : 'Not Paid'}
                     </p>
                     {paymentSummary.depositRemarks && (
                       <span className="text-[9px] text-slate-400">{paymentSummary.depositRemarks}</span>
@@ -1264,12 +1264,12 @@ export default function Dashboard() {
                               <span className={`text-xs font-extrabold mt-0.5 ${
                                 isFuture ? 'text-slate-400' : isPaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                               }`}>
-                                {isFuture ? '—' : isPaid ? '✓ Paid' : '✗ Unpaid'}
+                                {isFuture ? 'â€”' : isPaid ? 'âœ“ Paid' : 'âœ— Unpaid'}
                               </span>
                               {!isFuture && (
                                 <>
-                                  <span className="text-[9px] text-emerald-500 mt-0.5">₹{paidAmt}</span>
-                                  <span className="text-[9px] text-rose-500">Rem: ₹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
+                                  <span className="text-[9px] text-emerald-500 mt-0.5">â‚¹{paidAmt}</span>
+                                  <span className="text-[9px] text-rose-500">Rem: â‚¹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
                                   {payment?.remarks && <span className="text-[8px] text-slate-400 italic truncate w-full">{payment.remarks}</span>}
                                 </>
                               )}
@@ -1363,7 +1363,7 @@ export default function Dashboard() {
                           }`}>{leave.status}</span>
                         </div>
                         <span className="text-slate-400">
-                          {new Date(leave.fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} — {new Date(leave.toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          {new Date(leave.fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} â€” {new Date(leave.toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </span>
                         {leave.reason && <span className="text-slate-500 italic">{leave.reason}</span>}
                       </div>
@@ -1403,7 +1403,7 @@ export default function Dashboard() {
               <div className="flex flex-col gap-1 p-4 rounded-2xl bg-orange-50/30 dark:bg-slate-900/30 border border-orange-100/30 dark:border-slate-800">
                 <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Approved By</span>
                 <span className="font-extrabold text-slate-800 dark:text-white text-base">
-                  {profileData?.approvedByName || '—'}
+                  {profileData?.approvedByName || 'â€”'}
                 </span>
               </div>
             </div>
@@ -1533,8 +1533,8 @@ export default function Dashboard() {
                         const passed = score.marksObtained >= threshold;
                         return (
                           <tr key={score.id} className="border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-orange-50/10 dark:hover:bg-slate-900/10">
-                            <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">{score.bookName || '—'}</td>
-                            <td className="py-3 px-4 text-center text-slate-500">{score.totalMarks ?? '—'}</td>
+                            <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">{score.bookName || 'â€”'}</td>
+                            <td className="py-3 px-4 text-center text-slate-500">{score.totalMarks ?? 'â€”'}</td>
                             <td className="py-3 px-4 text-center font-bold text-saffron-700 dark:text-saffron-400">{score.marksObtained}</td>
                             <td className="py-3 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400">{pct}%</td>
                             <td className="py-3 px-4 text-center">
@@ -1608,6 +1608,32 @@ export default function Dashboard() {
                 const selected = rentOverview.monthly.find(m => m.year === rentOverviewYear && m.month === rentOverviewMonth);
                 const collected = selected?.totalCollected || 0;
                 const paidCount = selected?.paidCount || 0;
+                const openDevotee = (id) => {
+                  const d = accDevotees.find(x => x.id === id);
+                  if (d) { setAccSelectedProfile(d); fetchAccPayments(d.id); }
+                };
+                const Row = ({ d, paid }) => (
+                  <button
+                    onClick={() => openDevotee(d.id)}
+                    className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-orange-50 dark:hover:bg-slate-800 text-left transition-colors w-full"
+                  >
+                    <img src={getPhotoUrl(d.photographUrl)} alt="" className="h-7 w-7 rounded-full object-cover border border-slate-200 shrink-0" />
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <span className="text-xs font-bold text-slate-800 dark:text-white truncate">{d.name}</span>
+                      <span className="text-[9px] text-slate-400">{d.devoteeId}</span>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0">
+                      {paid ? (
+                        <>
+                          <span className="text-[11px] font-bold text-emerald-600">â‚¹{d.amountPaid.toLocaleString('en-IN')}</span>
+                          {d.remaining > 0 && <span className="text-[9px] text-rose-500">Rem: â‚¹{d.remaining.toLocaleString('en-IN')}</span>}
+                        </>
+                      ) : (
+                        <span className="text-[11px] font-bold text-rose-600">â‚¹{d.monthlyFee.toLocaleString('en-IN')}</span>
+                      )}
+                    </div>
+                  </button>
+                );
                 const monthLabel = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][rentOverviewMonth - 1];
                 return (
                   <div className="flex flex-col gap-3">
@@ -1627,16 +1653,40 @@ export default function Dashboard() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20">
-                        <span className="text-[9px] font-bold uppercase text-slate-500">Total Rent Due — {monthLabel} {rentOverviewYear}</span>
-                        <p className="text-lg font-extrabold text-blue-600">₹{rentOverview.selectedExpected.toLocaleString('en-IN')}</p>
-                        <span className="text-[9px] text-slate-400">Sum of individual rent amounts across {rentOverview.selectedDevoteeCount} devotee(s)</span>
+                        <span className="text-[9px] font-bold uppercase text-slate-500">Total Rent Due â€” {monthLabel} {rentOverviewYear}</span>
+                        <p className="text-lg font-extrabold text-blue-600">â‚¹{rentOverview.selectedExpected.toLocaleString('en-IN')}</p>
+                        <span className="text-[9px] text-slate-400">Sum of rent amounts for {rentOverview.selectedDevoteeCount} active devotee(s)</span>
                       </div>
                       <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20">
-                        <span className="text-[9px] font-bold uppercase text-slate-500">Actually Paid — {monthLabel} {rentOverviewYear}</span>
-                        <p className="text-lg font-extrabold text-emerald-600">₹{collected.toLocaleString('en-IN')}</p>
+                        <span className="text-[9px] font-bold uppercase text-slate-500">Actually Paid â€” {monthLabel} {rentOverviewYear}</span>
+                        <p className="text-lg font-extrabold text-emerald-600">â‚¹{collected.toLocaleString('en-IN')}</p>
                         <span className="text-[9px] text-slate-400">{paidCount} / {rentOverview.selectedDevoteeCount} devotees paid</span>
                       </div>
                     </div>
+                    {!accSelectedProfile && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/40 flex flex-col gap-2">
+                          <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400">Paid Laxmi ({rentOverview.paidList.length})</span>
+                          {rentOverview.paidList.length === 0 ? (
+                            <p className="text-[10px] text-slate-400 italic py-2 text-center">No payments recorded.</p>
+                          ) : (
+                            <div className="flex flex-col max-h-64 overflow-y-auto">
+                              {rentOverview.paidList.map(d => <Row key={d.id} d={d} paid />)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-3 rounded-xl border border-rose-100 dark:border-rose-900/40 flex flex-col gap-2">
+                          <span className="text-[10px] font-bold uppercase text-rose-700 dark:text-rose-400">Not Paid Laxmi ({rentOverview.unpaidList.length})</span>
+                          {rentOverview.unpaidList.length === 0 ? (
+                            <p className="text-[10px] text-slate-400 italic py-2 text-center">Everyone has paid.</p>
+                          ) : (
+                            <div className="flex flex-col max-h-64 overflow-y-auto">
+                              {rentOverview.unpaidList.map(d => <Row key={d.id} d={d} />)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1687,7 +1737,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <button onClick={() => { setAccSelectedProfile(null); setAccPayments([]); setAccPaySummary(null); }} className="text-[10px] font-bold text-slate-500 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
-                      ✕ Close
+                      âœ• Close
                     </button>
                   </div>
 
@@ -1695,7 +1745,7 @@ export default function Dashboard() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={async () => {
-                        const fee = prompt('Set monthly fee (₹):', accPaySummary?.monthlyFee || '');
+                        const fee = prompt('Set monthly fee (â‚¹):', accPaySummary?.monthlyFee || '');
                         if (fee === null) return;
                         await fetch(apiUrl(`/api/devotees/${accSelectedProfile.id}/monthly-fee`), {
                           method: 'PUT',
@@ -1706,11 +1756,11 @@ export default function Dashboard() {
                       }}
                       className="text-[10px] px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold"
                     >
-                      Set Monthly Fee {accPaySummary?.monthlyFee ? `(₹${accPaySummary.monthlyFee})` : ''}
+                      Set Monthly Fee {accPaySummary?.monthlyFee ? `(â‚¹${accPaySummary.monthlyFee})` : ''}
                     </button>
                     <button
                       onClick={async () => {
-                        const amt = prompt('Deposit amount (₹):', accPaySummary?.depositAmount || '');
+                        const amt = prompt('Deposit amount (â‚¹):', accPaySummary?.depositAmount || '');
                         if (amt === null) return;
                         await fetch(apiUrl(`/api/devotees/${accSelectedProfile.id}/deposit`), {
                           method: 'PUT',
@@ -1721,7 +1771,7 @@ export default function Dashboard() {
                       }}
                       className="text-[10px] px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold"
                     >
-                      {accPaySummary?.depositPaid ? `✓ Deposit ₹${accPaySummary.depositAmount}` : 'Mark Deposit Paid'}
+                      {accPaySummary?.depositPaid ? `âœ“ Deposit â‚¹${accPaySummary.depositAmount}` : 'Mark Deposit Paid'}
                     </button>
                   </div>
 
@@ -1758,12 +1808,12 @@ export default function Dashboard() {
                             >
                               <span className="text-[9px] font-bold text-slate-500">{monthName}</span>
                               <span className={`text-[10px] font-extrabold ${isFuture ? 'text-slate-400' : isPaid ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {isFuture ? '—' : isPaid ? '✓ Paid' : '✗ Due'}
+                                {isFuture ? 'â€”' : isPaid ? 'âœ“ Paid' : 'âœ— Due'}
                               </span>
                               {!isFuture && (
                                 <>
-                                  <span className="text-[8px] text-emerald-500">₹{paidAmt}</span>
-                                  <span className="text-[8px] text-rose-500">Rem: ₹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
+                                  <span className="text-[8px] text-emerald-500">â‚¹{paidAmt}</span>
+                                  <span className="text-[8px] text-rose-500">Rem: â‚¹{fee - paidAmt > 0 ? fee - paidAmt : 0}</span>
                                   {payment?.remarks && <span className="text-[7px] text-slate-400 italic truncate w-full">{payment.remarks}</span>}
                                 </>
                               )}

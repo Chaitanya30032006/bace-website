@@ -121,6 +121,7 @@ model DevoteeProfile {
   monthlyPayments          MonthlyPayment[]
   editRequests             ProfileEditRequest[]
   leaveRequests            LeaveRequest[]
+  statusHistory            MemberStatusHistory[]
   createdAt                DateTime                  @default(now()) @map("created_at")
   updatedAt                DateTime                  @updatedAt @map("updated_at")
 
@@ -436,6 +437,19 @@ model ServiceRole {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("service_roles")
+}
+
+// One row per member status change, so past months can be evaluated with the status that applied then
+model MemberStatusHistory {
+  id        String         @id @default(uuid()) @db.Uuid
+  profileId String         @map("profile_id") @db.Uuid
+  status    String
+  changedAt DateTime       @default(now()) @map("changed_at")
+  changedBy String?        @map("changed_by") @db.Uuid
+  profile   DevoteeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, changedAt])
+  @@map("member_status_history")
 }
 
 model MemberGroupOption {

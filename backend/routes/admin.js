@@ -80,6 +80,9 @@ router.post('/requests/:id/action', mainAdminOnly, async (req, res) => {
             anniversaryInfo: comment || (status === 'Approved' ? 'WEB-SIGNUP' : 'REJECTED')
           }
         });
+        await tx.memberStatusHistory.create({
+          data: { profileId: profile.id, status: status === 'Approved' ? 'Active' : 'Rejected', changedBy: req.user.id }
+        });
       }
 
       await tx.notification.create({
@@ -391,11 +394,20 @@ router.post('/users/:id/member-status', async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (!user.devoteeProfile) return res.status(404).json({ message: 'Profile not found' });
 
+    const current = await prisma.membershipInformation.findUnique({ where: { profileId: user.devoteeProfile.id } });
+
     await prisma.membershipInformation.upsert({
       where: { profileId: user.devoteeProfile.id },
       update: { memberStatus },
       create: { profileId: user.devoteeProfile.id, memberStatus }
     });
+
+    // Record the change so past months use the status that applied at the time
+    if (current?.memberStatus !== memberStatus) {
+      await prisma.memberStatusHistory.create({
+        data: { profileId: user.devoteeProfile.id, status: memberStatus, changedBy: req.user.id }
+      });
+    }
 
     await prisma.auditLog.create({
       data: {

@@ -22,7 +22,7 @@ const PageLoader = () => (
 );
 
 export default function App() {
-  // Stable snapshot — avoids re-read on every render that causes Navigate loop warning
+  // Stable snapshot Ã¢â‚¬â€ avoids re-read on every render that causes Navigate loop warning
   const { token, user } = useMemo(() => getAuthSession(), []);
 
   return (

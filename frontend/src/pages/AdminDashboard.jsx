@@ -56,7 +56,7 @@ export default function AdminDashboard() {
   const [sortField, setSortField] = useState('dateJoined');
   const [sortOrder, setSortOrder] = useState('desc');
 
-  // New Album creation state — removed (managed from Memories page)
+  // New Album creation state Ã¢â‚¬â€ removed (managed from Memories page)
 
   const fetchAdminData = async () => {
     try {
@@ -204,7 +204,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Handle Create Album — removed (managed from Memories page)
+  // Handle Create Album Ã¢â‚¬â€ removed (managed from Memories page)
 
   // Handle Edit Request Action (Approve / Reject)
   const handleEditRequestAction = async (id, action) => {
@@ -380,7 +380,7 @@ export default function AdminDashboard() {
             <X className="h-4 w-4" />
           </button>
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-2xl">🎂</span>
+            <span className="text-2xl">Ã°Å¸Å½â€š</span>
             <h3 className="font-extrabold text-sm text-pink-700 dark:text-pink-400">Today's Birthday{todayBirthdays.length > 1 ? 's' : ''}!</h3>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -394,7 +394,7 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-pink-600/70 dark:text-pink-400/50 mt-2 font-medium">Hare Krishna! Wishing a wonderful birthday 🙏</p>
+          <p className="text-[10px] text-pink-600/70 dark:text-pink-400/50 mt-2 font-medium">Hare Krishna! Wishing a wonderful birthday Ã°Å¸â„¢Â</p>
         </div>
       )}
 
@@ -626,7 +626,7 @@ export default function AdminDashboard() {
                       <tr key={dev.id} onClick={() => setSelectedDevoteeId(dev.id)} className="border-b border-orange-50/10 dark:border-slate-800/40 hover:bg-orange-50/10 dark:hover:bg-slate-900/10 cursor-pointer">
                         <td className="py-3 font-bold text-saffron-700 dark:text-saffron-400 text-xs">{dev.devoteeId}</td>
                         <td className="py-3 text-slate-800 dark:text-white font-semibold">{dev.user?.name}</td>
-                        <td className="py-3 text-slate-500 text-xs">{dev.dateJoined ? new Date(dev.dateJoined).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
+                        <td className="py-3 text-slate-500 text-xs">{dev.dateJoined ? new Date(dev.dateJoined).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Ã¢â‚¬â€'}</td>
                         <td className="py-3 text-slate-400 text-xs">{(dev.serviceRoles || []).join(', ') || dev.memberType}</td>
                         <td className="py-3 text-xs"><span className={`font-bold ${dev.memberStatus === 'Active' ? 'text-green-600' : 'text-red-500'}`}>{dev.memberStatus}</span></td>
                         <td className="py-3 text-xs"><span className={`font-bold ${dev.durationType === 'Temporary' ? 'text-amber-600' : 'text-slate-500'}`}>{dev.durationType || 'Permanent'}</span></td>
@@ -688,6 +688,29 @@ export default function AdminDashboard() {
             const selected = rentOverview.monthly.find(m => m.year === rentYear && m.month === rentMonth);
             const collected = selected?.totalCollected || 0;
             const paidCount = selected?.paidCount || 0;
+            const photoSrc = (url) => url && url.startsWith('http') ? url : (url ? `${API_BASE}${url}?token=${token}` : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=60');
+            const DevoteeRow = ({ d, paid }) => (
+              <button
+                onClick={() => setSelectedDevoteeId(d.id)}
+                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-orange-50/50 dark:hover:bg-slate-800/50 text-left transition-colors w-full"
+              >
+                <img src={photoSrc(d.photographUrl)} alt="" className="h-8 w-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-sm font-bold text-slate-800 dark:text-white truncate">{d.name}</span>
+                  <span className="text-[10px] text-slate-400">{d.devoteeId}{paid && d.remarks ? ` Ã¢â‚¬Â¢ ${d.remarks}` : ''}</span>
+                </div>
+                <div className="flex flex-col items-end shrink-0">
+                  {paid ? (
+                    <>
+                      <span className="text-xs font-bold text-emerald-600">Ã¢â€šÂ¹{d.amountPaid.toLocaleString('en-IN')}</span>
+                      {d.remaining > 0 && <span className="text-[10px] text-rose-500">Rem: Ã¢â€šÂ¹{d.remaining.toLocaleString('en-IN')}</span>}
+                    </>
+                  ) : (
+                    <span className="text-xs font-bold text-rose-600">Ã¢â€šÂ¹{d.monthlyFee.toLocaleString('en-IN')}</span>
+                  )}
+                </div>
+              </button>
+            );
             return (
               <>
                 <div className="p-6 rounded-3xl glass-panel border border-orange-100/40 dark:border-slate-800 shadow-md flex flex-wrap items-end gap-4">
@@ -707,14 +730,37 @@ export default function AdminDashboard() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-5 rounded-2xl glass-panel border border-orange-100/30 dark:border-slate-800 shadow-sm flex flex-col gap-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Total Rent Due — {monthName(rentMonth)} {rentYear}</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">₹{rentOverview.selectedExpected.toLocaleString('en-IN')}</span>
-                    <span className="text-[10px] text-slate-400">Sum of individual rent amounts for {rentOverview.selectedDevoteeCount} devotee(s) who had joined by then</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Total Rent Due Ã¢â‚¬â€ {monthName(rentMonth)} {rentYear}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">Ã¢â€šÂ¹{rentOverview.selectedExpected.toLocaleString('en-IN')}</span>
+                    <span className="text-[10px] text-slate-400">Sum of rent amounts for {rentOverview.selectedDevoteeCount} active devotee(s) who had joined by then</span>
                   </div>
                   <div className="p-5 rounded-2xl glass-panel border border-orange-100/30 dark:border-slate-800 shadow-sm flex flex-col gap-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Actually Paid — {monthName(rentMonth)} {rentYear}</span>
-                    <span className="text-2xl font-extrabold text-emerald-600">₹{collected.toLocaleString('en-IN')}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Actually Paid Ã¢â‚¬â€ {monthName(rentMonth)} {rentYear}</span>
+                    <span className="text-2xl font-extrabold text-emerald-600">Ã¢â€šÂ¹{collected.toLocaleString('en-IN')}</span>
                     <span className="text-[10px] text-slate-400">{paidCount} / {rentOverview.selectedDevoteeCount} devotees paid</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="p-5 rounded-2xl glass-panel border border-emerald-100 dark:border-emerald-900/40 shadow-sm flex flex-col gap-3">
+                    <h3 className="font-bold text-sm text-emerald-700 dark:text-emerald-400">Paid Laxmi ({rentOverview.paidList.length})</h3>
+                    {rentOverview.paidList.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-4 text-center">No payments recorded for this month.</p>
+                    ) : (
+                      <div className="flex flex-col gap-0.5 max-h-[28rem] overflow-y-auto pr-1">
+                        {rentOverview.paidList.map(d => <DevoteeRow key={d.id} d={d} paid />)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-5 rounded-2xl glass-panel border border-rose-100 dark:border-rose-900/40 shadow-sm flex flex-col gap-3">
+                    <h3 className="font-bold text-sm text-rose-700 dark:text-rose-400">Not Paid Laxmi ({rentOverview.unpaidList.length})</h3>
+                    {rentOverview.unpaidList.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-4 text-center">Everyone has paid for this month.</p>
+                    ) : (
+                      <div className="flex flex-col gap-0.5 max-h-[28rem] overflow-y-auto pr-1">
+                        {rentOverview.unpaidList.map(d => <DevoteeRow key={d.id} d={d} />)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -1057,7 +1103,7 @@ export default function AdminDashboard() {
                       <>
                         <div className="flex flex-col">
                           <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{bt.bookName}</span>
-                          <span className="text-[10px] text-slate-400">Total: {bt.totalMarks} · Passing: {bt.passingMarks} · Scored: {bt.scoresCount ?? 0}</span>
+                          <span className="text-[10px] text-slate-400">Total: {bt.totalMarks} Ã‚Â· Passing: {bt.passingMarks} Ã‚Â· Scored: {bt.scoresCount ?? 0}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <button
@@ -1106,11 +1152,11 @@ export default function AdminDashboard() {
             <div className="p-6 rounded-3xl glass-panel border border-orange-100/40 dark:border-slate-800 shadow-md flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-bold text-sm text-slate-800 dark:text-white">Grade All Devotees — {bulkBookTest.bookName}</h3>
-                  <p className="text-xs text-slate-400">Out of {bulkBookTest.totalMarks} · Passing: {bulkBookTest.passingMarks}</p>
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-white">Grade All Devotees Ã¢â‚¬â€ {bulkBookTest.bookName}</h3>
+                  <p className="text-xs text-slate-400">Out of {bulkBookTest.totalMarks} Ã‚Â· Passing: {bulkBookTest.passingMarks}</p>
                 </div>
                 <button onClick={() => setBulkBookTest(null)} className="text-[10px] font-bold text-slate-500 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
-                  ✕ Close
+                  Ã¢Å“â€¢ Close
                 </button>
               </div>
 

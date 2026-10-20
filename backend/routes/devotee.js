@@ -42,7 +42,14 @@ const profilePhotoUpload = multer({
   }
 });
 
-const checkAccess = (req, profileUserId) => req.user.role === 'Admin' || (req.user.additionalRoles || []).includes('Accountant') || req.user.id === profileUserId;
+// Admin or the profile owner
+const checkAccess = (req, profileUserId) =>
+  req.user.role === 'Admin' || req.user.id === profileUserId;
+
+// Payment records only: Admin, Accountant, or the profile owner
+const checkPaymentAccess = (req, profileUserId) =>
+  checkAccess(req, profileUserId) ||
+  (req.user.additionalRoles || []).includes('Accountant');
 
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -80,7 +87,22 @@ router.get('/', authenticate, async (req, res) => {
       include: profileInclude
     });
 
-    const devotees = profiles.map(formatProfileForApi);
+    let devotees = profiles.map(formatProfileForApi);
+
+    // Accountants only need enough information to identify a devotee.
+    // Keep sensitive personal details admin-only.
+    if (req.user.role !== 'Admin') {
+      devotees = devotees.map(d => ({
+        id: d.id,
+        devoteeId: d.devoteeId,
+        photographUrl: d.photographUrl,
+        memberStatus: d.memberStatus,
+        user: {
+          id: d.user?.id,
+          name: d.user?.name
+        }
+      }));
+    }
     res.status(200).json({ status: 'success', results: devotees.length, data: devotees });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching devotee list', error: error.message });
@@ -289,6 +311,13 @@ router.put('/:id', authenticate, validate(profileUpdateSchema), async (req, res)
             memberExpiryDate: basicInfo.memberExpiryDate ? new Date(basicInfo.memberExpiryDate) : null
           }
         });
+// Record status changes made through the profile editor
+        const previousStatus = profile.membershipInformation?.memberStatus;
+        if (basicInfo.memberStatus && basicInfo.memberStatus !== previousStatus) {
+          await prisma.memberStatusHistory.create({
+            data: { profileId: profile.id, status: basicInfo.memberStatus, changedBy: req.user.id }
+          });
+        }
       }
     }
 
@@ -604,34 +633,130 @@ router.delete('/:id/education/:eduId', authenticate, async (req, res) => {
   }
 });
 
-// ── Monthly Payments Endpoints ──
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Monthly Payments Endpoints ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 // Rent (Laxmi) overview: total monthly fee across all devotees + month-wise collection breakdown
 router.get('/rent/overview', authenticate, async (req, res) => {
   try {
-    if (req.user.role !== 'Admin' && !(req.user.additionalRoles || []).includes('Accountant')) {
-      return res.status(403).json({ message: 'Only Admin or Accountant can view the rent overview.' });
+    if (
+      req.user.role !== 'Admin' &&
+      !(req.user.additionalRoles || []).includes('Accountant')
+    ) {
+      return res.status(403).json({
+        message: 'Only Admin or Accountant can view the rent overview.'
+      });
     }
 
     const now = new Date();
     const year = parseInt(req.query.year, 10) || now.getFullYear();
     const month = parseInt(req.query.month, 10) || now.getMonth() + 1;
 
-    const profiles = await prisma.devoteeProfile.findMany({
-      where: { monthlyFee: { not: null, gt: 0 } },
-      select: { monthlyFee: true, devotionalInformation: { select: { dateJoined: true } } }
-    });
-    const totalMonthlyFee = profiles.reduce((sum, p) => sum + (p.monthlyFee || 0), 0);
-    const totalDevoteesWithFee = profiles.length;
+    if (month < 1 || month > 12 || !Number.isInteger(year)) {
+      return res.status(400).json({ message: 'Invalid year or month.' });
+    }
 
-    // Only count devotees who had already joined by the end of the selected month
-    const endOfSelectedMonth = new Date(year, month, 0, 23, 59, 59, 999);
-    const dueProfiles = profiles.filter(p => {
-      const joined = p.devotionalInformation?.dateJoined;
+    const endOfSelectedMonth = new Date(
+      year, month, 0, 23, 59, 59, 999
+    );
+
+    const allProfiles = await prisma.devoteeProfile.findMany({
+      where: { monthlyFee: { not: null, gt: 0 } },
+      select: {
+        id: true,
+        devoteeId: true,
+        photographUrl: true,
+        monthlyFee: true,
+        user: { select: { name: true } },
+        membershipInformation: { select: { memberStatus: true } },
+        devotionalInformation: { select: { dateJoined: true } },
+        statusHistory: {
+          orderBy: { changedAt: 'asc' },
+          select: { status: true, changedAt: true }
+        },
+        monthlyPayments: {
+          where: { year, month, status: 'Paid' },
+          select: { amount: true, remarks: true, paidAt: true }
+        }
+      }
+    });
+
+    const statusAt = (profile) => {
+      const history = profile.statusHistory || [];
+
+      if (history.length === 0) {
+        return profile.membershipInformation?.memberStatus || 'Active';
+      }
+
+      const previousChanges = history.filter(
+        entry => new Date(entry.changedAt) <= endOfSelectedMonth
+      );
+
+      if (previousChanges.length > 0) {
+        return previousChanges[previousChanges.length - 1].status;
+      }
+
+      return history[0].status === 'Active' ? 'Inactive' : 'Active';
+    };
+
+    const currentActive = allProfiles.filter(
+      profile => profile.membershipInformation?.memberStatus === 'Active'
+    );
+
+    const totalMonthlyFee = currentActive.reduce(
+      (sum, profile) => sum + (profile.monthlyFee || 0), 0
+    );
+
+    const totalDevoteesWithFee = currentActive.length;
+
+    const dueProfiles = allProfiles.filter(profile => {
+      if (statusAt(profile) !== 'Active') return false;
+
+      const joined = profile.devotionalInformation?.dateJoined;
+
       return !joined || new Date(joined) <= endOfSelectedMonth;
     });
-    const selectedExpected = dueProfiles.reduce((sum, p) => sum + (p.monthlyFee || 0), 0);
+
+    const selectedExpected = dueProfiles.reduce(
+      (sum, profile) => sum + (profile.monthlyFee || 0), 0
+    );
+
     const selectedDevoteeCount = dueProfiles.length;
+    const paidList = [];
+    const unpaidList = [];
+
+    for (const profile of dueProfiles) {
+      const payment = profile.monthlyPayments[0];
+
+      const entry = {
+        id: profile.id,
+        devoteeId: profile.devoteeId,
+        name: profile.user?.name || 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â',
+        photographUrl: profile.photographUrl,
+        monthlyFee: profile.monthlyFee
+      };
+
+      if (payment) {
+        const amountPaid = payment.amount || 0;
+
+        paidList.push({
+          ...entry,
+          amountPaid,
+          remaining: Math.max(0, profile.monthlyFee - amountPaid),
+          remarks: payment.remarks,
+          paidAt: payment.paidAt
+        });
+      } else {
+        unpaidList.push(entry);
+      }
+    }
+
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    paidList.sort(byName);
+    unpaidList.sort(byName);
+
+    const selectedCollected = paidList.reduce(
+      (sum, profile) => sum + profile.amountPaid, 0
+    );
 
     const payments = await prisma.monthlyPayment.findMany({
       where: { status: 'Paid' },
@@ -639,21 +764,48 @@ router.get('/rent/overview', authenticate, async (req, res) => {
     });
 
     const byMonth = {};
-    for (const p of payments) {
-      const key = `${p.year}-${String(p.month).padStart(2, '0')}`;
-      if (!byMonth[key]) byMonth[key] = { year: p.year, month: p.month, totalCollected: 0, paidCount: 0 };
-      byMonth[key].totalCollected += p.amount || 0;
+
+    for (const payment of payments) {
+      const key = `${payment.year}-${String(payment.month).padStart(2, '0')}`;
+
+      if (!byMonth[key]) {
+        byMonth[key] = {
+          year: payment.year,
+          month: payment.month,
+          totalCollected: 0,
+          paidCount: 0
+        };
+      }
+
+      byMonth[key].totalCollected += payment.amount || 0;
       byMonth[key].paidCount += 1;
     }
 
-    const monthly = Object.values(byMonth).sort((a, b) => (b.year - a.year) || (b.month - a.month));
+    const monthly = Object.values(byMonth).sort(
+      (a, b) => (b.year - a.year) || (b.month - a.month)
+    );
 
     res.json({
       status: 'success',
-      data: { totalMonthlyFee, totalDevoteesWithFee, year, month, selectedExpected, selectedDevoteeCount, monthly }
+      data: {
+        totalMonthlyFee,
+        totalDevoteesWithFee,
+        year,
+        month,
+        selectedExpected,
+        selectedDevoteeCount,
+        selectedCollected,
+        selectedPaidCount: paidList.length,
+        paidList,
+        unpaidList,
+        monthly
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to retrieve rent overview', error: error.message });
+    res.status(500).json({
+      message: 'Failed to retrieve rent overview',
+      error: error.message
+    });
   }
 });
 
@@ -662,7 +814,7 @@ router.get('/:id/payments', authenticate, async (req, res) => {
   try {
     const profile = await prisma.devoteeProfile.findUnique({ where: { id: req.params.id } });
     if (!profile) return res.status(404).json({ message: 'Profile not found' });
-    if (!checkAccess(req, profile.userId)) {
+if (!checkPaymentAccess(req, profile.userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -809,7 +961,7 @@ router.put('/:id/deposit', authenticate, async (req, res) => {
   }
 });
 
-// ── Profile Edit Request Endpoints ──
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Profile Edit Request Endpoints ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 // Devotee requests edit permission for a specific section
 router.post('/:id/request-edit', authenticate, async (req, res) => {
@@ -876,7 +1028,7 @@ router.get('/:id/edit-request-status', authenticate, async (req, res) => {
   }
 });
 
-// ── Leave / Going Home Requests ──
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Leave / Going Home Requests ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 // Devotee submits a leave form
 router.post('/:id/leave', authenticate, async (req, res) => {
@@ -924,7 +1076,7 @@ router.get('/:id/leave', authenticate, async (req, res) => {
   }
 });
 
-// ── Book Test Scores ──
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Book Test Scores ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 // Get all book test scores for a devotee
 router.get('/:id/book-test-scores', authenticate, async (req, res) => {
